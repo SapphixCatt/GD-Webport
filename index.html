@@ -167,19 +167,24 @@ var Module = {
   })(),
   gdInputQueue: [],
   gdCursorPos: [0, 0],
-  locateFile: function (p) { return p; },
+  locateFile: function (path, prefix) {
+    if (path === 'gd_web.data') {
+      return 'https://github.com/SapphixCatt/GD-Webport/releases/download/v1.0.0/gd_web.data';
+    }
+    return (prefix || '') + path;
+  },
   instantiateWasm: function (imports, success) {
-    var url = 'gd_web.wasm';
+    var url = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v1.0.0/gd_web.wasm';
     function instantiate(ab) {
       return WebAssembly.instantiate(ab, imports).then(function (r) {
         success(r.instance, r.module);
       });
     }
-    fetch(url, { cache: 'no-store' }).then(function (resp) {
+    fetch(url).then(function (resp) {
       if (!resp.ok) throw new Error('wasm HTTP ' + resp.status);
       return resp.arrayBuffer().then(instantiate);
     }).catch(function () {
-      return fetch(url, { cache: 'no-store' }).then(function (r2) { return r2.arrayBuffer(); }).then(instantiate);
+      return fetch(url).then(function (r2) { return r2.arrayBuffer(); }).then(instantiate);
     });
     return {};
   },
@@ -266,7 +271,6 @@ window.addEventListener('DOMContentLoaded', gdStart);
 
   function push(m, w, l) { Module.gdInputQueue.push([m | 0, w | 0, l | 0]); }
 
-  // Auto focus canvas on any click
   window.addEventListener('click', function() {
     if (el) el.focus();
   });
@@ -299,7 +303,7 @@ window.addEventListener('DOMContentLoaded', gdStart);
   var VK = { 'Escape':0x1B,'Space':0x20,'Enter':0x0D,'Backspace':0x08,'Tab':0x09,
   'ArrowLeft':0x25,'ArrowUp':0x26,'ArrowRight':0x27,'ArrowDown':0x28,
   'KeyW':0x57,'KeyA':0x41,'KeyS':0x53,'KeyD':0x44,
-  'KeyQ':0x51,'KeyE':0x45,'KeyR':0x52,'KeyF':0x46,'KeyP':0x50 };
+  'KeyQ':0x51,'KeyE':0x42,'KeyR':0x52,'KeyF':0x46,'KeyP':0x50 };
   var SCAN = { 'Escape':0x01,'Space':0x39,'Enter':0x1C,'Backspace':0x0E,'Tab':0x0F,
   'ArrowLeft':0x4B,'ArrowUp':0x48,'ArrowRight':0x4D,'ArrowDown':0x50,
   'KeyW':0x11,'KeyA':0x1E,'KeyS':0x1F,'KeyD':0x20,
