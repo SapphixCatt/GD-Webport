@@ -169,13 +169,13 @@ var Module = {
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data') {
-      var rawDataUrl = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v1.0.0/gd_web.data';
+      var rawDataUrl = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data';
       return 'https://gd-proxy.radekgaming67.workers.dev/?url=' + encodeURIComponent(rawDataUrl);
     }
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var rawWasmUrl = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v1.0.0/gd_web.wasm';
+    var rawWasmUrl = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.wasm';
     var url = 'https://gd-proxy.radekgaming67.workers.dev/?url=' + encodeURIComponent(rawWasmUrl);
 
     function instantiate(ab) {
