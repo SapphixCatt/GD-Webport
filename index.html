@@ -36,7 +36,7 @@ canvas {
 </style>
 
 <script>
-// Intercept all HTTP requests originating from JS and Emscripten runtime
+// Intercept online GD level/account requests through Cloudflare Proxy
 (function() {
   var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
 
@@ -169,14 +169,12 @@ var Module = {
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data') {
-      var rawDataUrl = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data';
-      return 'https://gd-proxy.radekgaming67.workers.dev/?url=' + encodeURIComponent(rawDataUrl);
+      return 'https://raw.githubusercontent.com/SapphixCatt/GD-Webport/v0/gd_web.data';
     }
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var rawWasmUrl = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.wasm';
-    var url = 'https://gd-proxy.radekgaming67.workers.dev/?url=' + encodeURIComponent(rawWasmUrl);
+    var url = 'https://raw.githubusercontent.com/SapphixCatt/GD-Webport/v0/gd_web.wasm';
 
     function instantiate(ab) {
       return WebAssembly.instantiate(ab, imports).then(function (r) {
