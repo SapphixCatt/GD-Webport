@@ -121,8 +121,6 @@ function restoreSaves(then) {
   } catch (e) { finish(); }
 }
 
-var CDN_RELEASE_URL = 'https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@v0/';
-
 var Module = {
   canvas: (function() {
     var c = document.getElementById('canvas');
@@ -131,16 +129,10 @@ var Module = {
   gdInputQueue: [],
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
-    if (path === 'gd_web.data' || path.endsWith('.data')) {
-      return CDN_RELEASE_URL + 'gd_web.data';
-    }
-    if (path === 'gd_web.wasm' || path.endsWith('.wasm')) {
-      return CDN_RELEASE_URL + 'gd_web.wasm';
-    }
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var wasmUrl = CDN_RELEASE_URL + 'gd_web.wasm';
+    var wasmUrl = 'gd_web.wasm';
 
     fetch(wasmUrl).then(function (resp) {
       if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
