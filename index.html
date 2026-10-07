@@ -37,7 +37,8 @@ canvas {
 
 <script>
 var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
-var CDN_BASE = "https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@main/";
+var GITHUB_DATA_URL = "https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data";
+var VERCEL_WASM_BASE = "https://your-vercel-project.vercel.app"; // Replace with your actual Vercel project URL
 
 function formatProxyUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
@@ -58,9 +59,12 @@ function formatProxyUrl(rawUrl) {
     return PROXY_BASE + encodeURIComponent(cleanEndpoint);
   }
 
-  if (rawUrl.indexOf('gd_web.data') >= 0 || rawUrl.indexOf('gd_web.wasm') >= 0) {
-    var file = rawUrl.split('/').pop().split('?')[0];
-    return CDN_BASE + file;
+  if (rawUrl.indexOf('gd_web.data') >= 0) {
+    return GITHUB_DATA_URL;
+  }
+
+  if (rawUrl.indexOf('gd_web.wasm') >= 0) {
+    return VERCEL_WASM_BASE.replace(/\/$/, '') + '/gd_web.wasm';
   }
   
   return rawUrl;
@@ -184,12 +188,12 @@ var Module = {
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data') {
-      return CDN_BASE + 'gd_web.data';
+      return GITHUB_DATA_URL;
     }
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var targetUrl = CDN_BASE + 'gd_web.wasm';
+    var targetUrl = VERCEL_WASM_BASE.replace(/\/$/, '') + '/gd_web.wasm';
 
     fetch(targetUrl).then(function (resp) {
       if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
@@ -246,7 +250,7 @@ function gdStart() {
   window.__gdInputReady = true;
   var c = document.getElementById('canvas');
   if (c) c.focus();
-  fetch(CDN_BASE + 'gd_web.js', { cache: 'no-store' }).then(function (r) {
+  fetch('https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@main/gd_web.js', { cache: 'no-store' }).then(function (r) {
     return r.text();
   }).then(function (code) {
     code = code.replace(/https?:\/\/www\.boomlings\.com\/database\//g, function(match) {
