@@ -1,374 +1,371 @@
-<!DOCTYPE html> 
- <html> 
- <head> 
- <meta charset="utf-8"> 
- <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"> 
- <meta name="color-scheme" content="dark"> 
- <meta name="theme-color" content="#000000"> 
- <link rel="icon" href="ref/logo.png"> 
- <title>Geometry Dash WASM</title> 
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="ref/logo.png">
+<title>Geometry Dash WASM</title>
 
- <style> 
- html, body { 
-   margin: 0; 
-   padding: 0; 
-   width: 100vw; 
-   height: 100vh; 
-   background: #000; 
-   overflow: hidden; 
-   display: flex; 
-   align-items: center; 
-   justify-content: center; 
- } 
- canvas { 
-   width: 100vw; 
-   height: 100vh; 
-   max-width: 100%; 
-   max-height: 100%; 
-   object-fit: contain; 
-   background: #000; 
-   image-rendering: pixelated; 
-   outline: none; 
-   display: block; 
-   user-select: none; 
-   touch-action: none; 
- } 
- </style> 
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+canvas {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #000;
+  image-rendering: pixelated;
+  outline: none;
+  display: block;
+  user-select: none;
+  touch-action: none;
+}
+</style>
 
- <script> 
- // Intercept online GD level/account requests through Cloudflare Proxy 
- (function() { 
-   var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url="; 
+<script>
+// Intercept online GD level/account requests through Cloudflare Proxy
+(function() {
+  var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
 
-   function formatProxyUrl(rawUrl) { 
-     if (!rawUrl || typeof rawUrl !== 'string') return rawUrl; 
-     
-     // Prevent recursive proxy wrapping 
-     if (rawUrl.indexOf(PROXY_BASE) === 0) return rawUrl; 
+  function formatProxyUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
+    
+    // Prevent recursive proxy wrapping
+    if (rawUrl.indexOf(PROXY_BASE) === 0) return rawUrl;
 
-     // Check if url targets GD server endpoints or relative PHP files 
-     var isGdRequest = rawUrl.indexOf('.php') >= 0 || 
-                       rawUrl.indexOf('database') >= 0 || 
-                       rawUrl.indexOf('boomlings.com') >= 0; 
+    // Check if url targets GD server endpoints or relative PHP files
+    var isGdRequest = rawUrl.indexOf('.php') >= 0 || 
+                      rawUrl.indexOf('database') >= 0 || 
+                      rawUrl.indexOf('boomlings.com') >= 0;
 
-     if (isGdRequest) { 
-       var fullUrl = rawUrl; 
-       
-       // Resolve relative path requests to full boomlings.com URLs 
-       if (fullUrl.indexOf('http://') !== 0 && fullUrl.indexOf('https://') !== 0) { 
-         var cleanPath = fullUrl.split('?')[0]; 
-         var endpoint = cleanPath.split('/').pop(); 
-         fullUrl = 'https://www.boomlings.com/database/' + endpoint; 
-         if (rawUrl.indexOf('?') >= 0) { 
-           fullUrl += '?' + rawUrl.split('?')[1]; 
-         } 
-       } 
-       
-       return PROXY_BASE + encodeURIComponent(fullUrl); 
-     } 
-     
-     return rawUrl; 
-   } 
+    if (isGdRequest) {
+      var fullUrl = rawUrl;
+      
+      // Resolve relative path requests to full boomlings.com URLs
+      if (fullUrl.indexOf('http://') !== 0 && fullUrl.indexOf('https://') !== 0) {
+        var cleanPath = fullUrl.split('?')[0];
+        var endpoint = cleanPath.split('/').pop();
+        fullUrl = 'https://www.boomlings.com/database/' + endpoint;
+        if (rawUrl.indexOf('?') >= 0) {
+          fullUrl += '?' + rawUrl.split('?')[1];
+        }
+      }
+      
+      return PROXY_BASE + encodeURIComponent(fullUrl);
+    }
+    
+    return rawUrl;
+  }
 
-   // Intercept standard Fetch API 
-   var origFetch = window.fetch.bind(window); 
-   window.fetch = function(input, init) { 
-     var url = (typeof input === 'string') ? input : (input && input.url ? input.url : ''); 
-     var target = formatProxyUrl(url); 
-     
-     if (target !== url) { 
-       if (typeof input === 'string') { 
-         input = target; 
-       } else if (input && input.url) { 
-         input = new Request(target, input); 
-       } 
-     } 
-     return origFetch(input, init); 
-   }; 
+  // Intercept standard Fetch API
+  var origFetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
+    var target = formatProxyUrl(url);
+    
+    if (target !== url) {
+      if (typeof input === 'string') {
+        input = target;
+      } else if (input && input.url) {
+        input = new Request(target, input);
+      }
+    }
+    return origFetch(input, init);
+  };
 
-   // Intercept XMLHttpRequest (used by C++ / Emscripten sockets) 
-   var origOpen = XMLHttpRequest.prototype.open; 
-   XMLHttpRequest.prototype.open = function(method, url, async, user, pass) { 
-     var target = formatProxyUrl(url); 
-     return origOpen.call(this, method, target, async !== false, user, pass); 
-   }; 
- })(); 
- </script> 
- </head> 
+  // Intercept XMLHttpRequest (used by C++ / Emscripten sockets)
+  var origOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
+    var target = formatProxyUrl(url);
+    return origOpen.call(this, method, target, async !== false, user, pass);
+  };
+})();
+</script>
+</head>
 
- <body> 
- <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas> 
+<body>
+<canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
- <script> 
- function syncFilesToDB(filePath, data) { 
-   try { 
-     var req = indexedDB.open('gdwasm_saves', 1); 
-     req.onupgradeneeded = function () { req.result.createObjectStore('files'); }; 
-     req.onsuccess = function () { 
-       try { 
-         var db = req.result; 
-         var tx = db.transaction('files', 'readwrite'); 
-         var store = tx.objectStore('files'); 
+<script>
+function syncFilesToDB(filePath, data) {
+  try {
+    var req = indexedDB.open('gdwasm_saves', 1);
+    req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
+    req.onsuccess = function () {
+      try {
+        var db = req.result;
+        var tx = db.transaction('files', 'readwrite');
+        var store = tx.objectStore('files');
+        var buf = (data.buffer && data.byteLength !== undefined) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data;
+        store.put(buf, filePath);
+      } catch (e) {}
+    };
+  } catch (e) {}
+}
 
-         var buf = (data.buffer && data.byteLength !== undefined) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data; 
-         store.put(buf, filePath); 
-       } catch (e) {} 
-     }; 
-   } catch (e) {} 
- } 
+function saveFS() {
+  if (!window.__gdRuntimeReady || typeof Module === 'undefined') return;
+  try {
+    if (Module._gd_request_save) Module._gd_request_save();
+    if (Module.FS) {
+      ['CCGameManager.dat', 'CCLocalLevels.dat', 'AppData/CCGameManager.dat', 'AppData/CCLocalLevels.dat'].forEach(function(file) {
+        try {
+          var p = file.indexOf('AppData/') === 0 ? '/' + file : '/Resources/' + file;
+          var data = Module.FS.readFile(p);
+          if (data && data.length) syncFilesToDB(file, data);
+        } catch(e) {}
+      });
+      if (Module.FS.syncfs) Module.FS.syncfs(false, function (err) {});
+    }
+  } catch (e) {}
+}
 
- function saveFS() { 
-   if (!window.__gdRuntimeReady || typeof Module === 'undefined') return; 
-   try { 
-     if (Module._gd_request_save) Module._gd_request_save(); 
-     if (Module.FS) { 
+setInterval(saveFS, 5000);
+document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
+window.addEventListener('beforeunload', saveFS);
 
-       ['CCGameManager.dat', 'CCLocalLevels.dat', 'AppData/CCGameManager.dat', 'AppData/CCLocalLevels.dat'].forEach(function(file) { 
-         try { 
-           var p = file.indexOf('AppData/') === 0 ? '/' + file : '/Resources/' + file; 
-           var data = Module.FS.readFile(p); 
-           if (data && data.length) syncFilesToDB(file, data); 
-         } catch(e) {} 
-       }); 
-       if (Module.FS.syncfs) Module.FS.syncfs(false, function (err) {}); 
-     } 
-   } catch (e) {} 
- } 
+function restoreSaves(then) {
+  var called = false;
+  function finish() { if (!called) { called = true; then(); } }
+  setTimeout(finish, 3000);
+  try {
+    var req = indexedDB.open('gdwasm_saves', 1);
+    req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
+    req.onerror = finish;
+    req.onsuccess = function () {
+      var store, keysReq;
+      try {
+        store = req.result.transaction('files', 'readonly').objectStore('files');
+        keysReq = store.getAllKeys();
+      } catch (e) { finish(); return; }
+      keysReq.onerror = finish;
+      keysReq.onsuccess = function () {
+        var keys = keysReq.result || [];
+        if (!keys.length) { finish(); return; }
+        var pending = keys.length;
+        function one() { if (--pending === 0) finish(); }
+        keys.forEach(function (k) {
+          var g = store.get(k);
+          g.onerror = one;
+          g.onsuccess = function () {
+            try {
+              if (g.result && g.result.byteLength) {
+                var s = String(k);
+                var base = s.indexOf('AppData/') === 0 ? '/' : '/Resources/';
+                var parts = s.split('/'), cur = base.replace(/\/$/, '');
+                for (var pi = 0; pi < parts.length - 1; ++pi) {
+                  cur += '/' + parts[pi];
+                  try { Module.FS.stat(cur); } catch (e2) { Module.FS.mkdir(cur); }
+                }
+                Module.FS.writeFile(base + s, new Uint8Array(g.result));
+              }
+            } catch (e) {}
+            one();
+          };
+        });
+      };
+    };
+  } catch (e) { finish(); }
+}
 
- setInterval(saveFS, 5000); 
- document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); }); 
- window.addEventListener('beforeunload', saveFS); 
+var Module = {
+  canvas: (function() {
+    var c = document.getElementById('canvas');
+    return c;
+  })(),
+  gdInputQueue: [],
+  gdCursorPos: [0, 0],
+  locateFile: function (path, prefix) {
+    if (path === 'gd_web.data') {
+      var target = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data';
+      return 'https://gd-proxy.radekgaming67.workers.dev/?url=' + encodeURIComponent(target);
+    }
+    return (prefix || '') + path;
+  },
+  instantiateWasm: function (imports, success) {
+    var target = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.wasm';
+    var proxyUrl = 'https://gd-proxy.radekgaming67.workers.dev/?url=' + encodeURIComponent(target);
 
- function restoreSaves(then) { 
-   var called = false; 
-   function finish() { if (!called) { called = true; then(); } } 
-   setTimeout(finish, 3000); 
-   try { 
-     var req = indexedDB.open('gdwasm_saves', 1); 
-     req.onupgradeneeded = function () { req.result.createObjectStore('files'); }; 
-     req.onerror = finish; 
-     req.onsuccess = function () { 
-       var store, keysReq; 
-       try { 
-         store = req.result.transaction('files', 'readonly').objectStore('files'); 
-         keysReq = store.getAllKeys(); 
-       } catch (e) { finish(); return; } 
-       keysReq.onerror = finish; 
-       keysReq.onsuccess = function () { 
-         var keys = keysReq.result || []; 
-         if (!keys.length) { finish(); return; } 
-         var pending = keys.length; 
-         function one() { if (--pending === 0) finish(); } 
-         keys.forEach(function (k) { 
-           var g = store.get(k); 
-           g.onerror = one; 
-           g.onsuccess = function () { 
-             try { 
-               if (g.result && g.result.byteLength) { 
-                 var s = String(k); 
-                 var base = s.indexOf('AppData/') === 0 ? '/' : '/Resources/'; 
-                 var parts = s.split('/'), cur = base.replace(/\/$/, ''); 
-                 for (var pi = 0; pi < parts.length - 1; ++pi) { 
-                   cur += '/' + parts[pi]; 
-                   try { Module.FS.stat(cur); } catch (e2) { Module.FS.mkdir(cur); } 
-                 } 
-                 Module.FS.writeFile(base + s, new Uint8Array(g.result)); 
-               } 
-             } catch (e) {} 
-             one(); 
-           }; 
-         }); 
-       }; 
-     }; 
-   } catch (e) { finish(); } 
- } 
+    fetch(proxyUrl).then(function (resp) {
+      if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
+      return resp.arrayBuffer();
+    }).then(function (bytes) {
+      return WebAssembly.instantiate(bytes, imports);
+    }).then(function (output) {
+      success(output.instance, output.module);
+    }).catch(function (err) {
+      console.error('WASM Load Error:', err);
+    });
 
- var Module = { 
-   canvas: (function() { 
-     var c = document.getElementById('canvas'); 
-     return c; 
-   })(), 
-   gdInputQueue: [], 
-   gdCursorPos: [0, 0], 
-   locateFile: function (path, prefix) { 
-     if (path === 'gd_web.data') { 
-       var target = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data'; 
-       return 'https://gd-proxy.radekgaming67.workers.dev/?url=' + encodeURIComponent(target); 
-     } 
-     return (prefix || '') + path; 
-   }, 
-   instantiateWasm: function (imports, success) { 
-     var target = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.wasm'; 
-     var proxyUrl = 'https://gd-proxy.radekgaming67.workers.dev/?url=' + encodeURIComponent(target); 
+    return {};
+  },
+  print: function (text) { console.log(text); },
+  printErr: function (text) { console.error(text); },
+  setStatus: function () {},
+  onRuntimeInitialized: function () {
+    window.__gdRuntimeReady = true;
+    if (Module._gd_autosave_set) Module._gd_autosave_set(1);
+    if (Module.FS) {
+      var origWrite = Module.FS.writeFile;
+      Module.FS.writeFile = function (path, data, opts) {
+        var res = origWrite.apply(this, arguments);
+        if (path && (path.indexOf('CCLocalLevels') >= 0 || path.indexOf('CCGameManager') >= 0 || path.indexOf('.dat') >= 0)) {
+          var cleanKey = path.replace(/^\/(Resources\/)?/, '');
+          syncFilesToDB(cleanKey, data);
+        }
+        return res;
+      };
+    }
+    try { Module.FS.chdir('/Resources'); } catch (e) {}
+    setTimeout(function () {
+      restoreSaves(function () {
+        try {
+          const r = Module._gd_boot();
+          if (r && typeof r.then === 'function') r.catch(function () {});
+        } catch (e) {}
+      });
+    }, 100);
+  }
+};
 
-     fetch(proxyUrl).then(function (resp) { 
-       if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status); 
-       return resp.arrayBuffer(); 
-     }).then(function (bytes) { 
-       return WebAssembly.instantiate(bytes, imports); 
-     }).then(function (output) { 
-       success(output.instance, output.module); 
-     }).catch(function (err) { 
-       console.error('WASM Load Error:', err); 
-     }); 
+function gdStart() {
+  window.__gdLoadStarted = true;
+  window.__gdInputReady = true;
+  var c = document.getElementById('canvas');
+  if (c) c.focus();
+  fetch('gd_web.js', { cache: 'no-store' }).then(function (r) {
+    return r.text();
+  }).then(function (code) {
+    var s = document.createElement('script');
+    s.textContent = code;
+    document.body.appendChild(s);
+  });
+}
 
-     return {}; 
-   }, 
-   print: function (text) { console.log(text); }, 
-   printErr: function (text) { console.error(text); }, 
-   setStatus: function () {}, 
-   onRuntimeInitialized: function () { 
-     window.__gdRuntimeReady = true; 
-     if (Module._gd_autosave_set) Module._gd_autosave_set(1); 
-     if (Module.FS) { 
-       var origWrite = Module.FS.writeFile; 
-       Module.FS.writeFile = function (path, data, opts) { 
-         var res = origWrite.apply(this, arguments); 
+window.addEventListener('DOMContentLoaded', gdStart);
+</script>
 
-         if (path && (path.indexOf('CCLocalLevels') >= 0 || path.indexOf('CCGameManager') >= 0 || path.indexOf('.dat') >= 0)) { 
-           var cleanKey = path.replace(/^\/(Resources\/)?/, ''); 
-           syncFilesToDB(cleanKey, data); 
-         } 
-         return res; 
-       }; 
-     } 
-     try { Module.FS.chdir('/Resources'); } catch (e) {} 
-     setTimeout(function () { 
-       restoreSaves(function () { 
-         try { 
-           const r = Module._gd_boot(); 
-           if (r && typeof r.then === 'function') r.catch(function () {}); 
-         } catch (e) {} 
-       }); 
-     }, 100); 
-   } 
- }; 
+<script>
+// Input Event & Focus Handling
+(function () {
+  const el = document.getElementById('canvas');
+  const WM_MOUSEMOVE = 0x200, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202,
+        WM_RBUTTONDOWN = 0x204, WM_RBUTTONUP = 0x205,
+        WM_MBUTTONDOWN = 0x207, WM_MBUTTONUP = 0x208;
 
- function gdStart() { 
-   window.__gdLoadStarted = true; 
-   window.__gdInputReady = true; 
-   var c = document.getElementById('canvas'); 
-   if (c) c.focus(); 
-   fetch('gd_web.js', { cache: 'no-store' }).then(function (r) { 
-     return r.text(); 
-   }).then(function (code) { 
-     var s = document.createElement('script'); 
-     s.textContent = code; 
-     document.body.appendChild(s); 
-   }); 
- } 
+  function ready() { return window.__gdInputReady === true; }
 
- window.addEventListener('DOMContentLoaded', gdStart); 
- </script> 
+  function pos(e) {
+    const r = el.getBoundingClientRect();
+    const targetAspect = 1920 / 1080;
+    const containerAspect = r.width / r.height;
+    let renderWidth, renderHeight, offsetX, offsetY;
+    if (containerAspect > targetAspect) {
+      renderHeight = r.height;
+      renderWidth = r.height * targetAspect;
+      offsetX = r.left + (r.width - renderWidth) / 2;
+      offsetY = r.top;
+    } else {
+      renderWidth = r.width;
+      renderHeight = r.width / targetAspect;
+      offsetX = r.left;
+      offsetY = r.top + (r.height - renderHeight) / 2;
+    }
+    const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    const x = Math.max(0, Math.min(1919, Math.round((clientX - offsetX) * 1920 / renderWidth)));
+    const y = Math.max(0, Math.min(1079, Math.round((clientY - offsetY) * 1080 / renderHeight)));
+    Module.gdCursorPos[0] = x;
+    Module.gdCursorPos[1] = y;
+    return (x & 0xffff) | ((y & 0xffff) << 16);
+  }
 
- <script> 
- // Input Event & Focus Handling 
- (function () { 
-   const el = document.getElementById('canvas'); 
-   const WM_MOUSEMOVE = 0x200, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202, 
-         WM_RBUTTONDOWN = 0x204, WM_RBUTTONUP = 0x205, 
-         WM_MBUTTONDOWN = 0x207, WM_MBUTTONUP = 0x208; 
+  function push(m, w, l) { Module.gdInputQueue.push([m | 0, w | 0, l | 0]); }
 
-   function ready() { return window.__gdInputReady === true; } 
+  window.addEventListener('click', function() {
+    if (el) el.focus();
+  });
 
-   function pos(e) { 
-     const r = el.getBoundingClientRect(); 
-     const targetAspect = 1920 / 1080; 
-     const containerAspect = r.width / r.height; 
-     let renderWidth, renderHeight, offsetX, offsetY; 
-     if (containerAspect > targetAspect) { 
-       renderHeight = r.height; 
-       renderWidth = r.height * targetAspect; 
-       offsetX = r.left + (r.width - renderWidth) / 2; 
-       offsetY = r.top; 
-     } else { 
-       renderWidth = r.width; 
-       renderHeight = r.width / targetAspect; 
-       offsetX = r.left; 
-       offsetY = r.top + (r.height - renderHeight) / 2; 
-     } 
-     const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0); 
-     const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0); 
-     const x = Math.max(0, Math.min(1919, Math.round((clientX - offsetX) * 1920 / renderWidth))); 
-     const y = Math.max(0, Math.min(1079, Math.round((clientY - offsetY) * 1080 / renderHeight))); 
-     Module.gdCursorPos[0] = x; 
-     Module.gdCursorPos[1] = y; 
-     return (x & 0xffff) | ((y & 0xffff) << 16); 
-   } 
+  window.addEventListener('mousedown', function (e) {
+    if (!ready() || e.target !== el) return;
+    el.focus();
+    var m = e.button === 2 ? WM_RBUTTONDOWN : (e.button === 1 ? WM_MBUTTONDOWN : WM_LBUTTONDOWN);
+    var w = e.button === 2 ? 2 : (e.button === 1 ? 16 : 1);
+    push(m, w, pos(e));
+    e.preventDefault();
+  });
 
-   function push(m, w, l) { Module.gdInputQueue.push([m | 0, w | 0, l | 0]); } 
+  window.addEventListener('mouseup', function (e) {
+    if (!ready()) return;
+    var m = e.button === 2 ? WM_RBUTTONUP : (e.button === 1 ? WM_MBUTTONUP : WM_LBUTTONUP);
+    push(m, 0, pos(e));
+    push(WM_MOUSEMOVE, 0, pos(e));
+    if (e.target === el) e.preventDefault();
+  });
 
-   window.addEventListener('click', function() { 
-     if (el) el.focus(); 
-   }); 
+  window.addEventListener('mousemove', function (e) {
+    if (!ready()) return;
+    var q = Module.gdInputQueue;
+    var w = (e.buttons & 1) ? 1 : 0, l = pos(e);
+    if (q.length && q[q.length - 1][0] === WM_MOUSEMOVE) q[q.length - 1] = [WM_MOUSEMOVE, w, l];
+    else q.push([WM_MOUSEMOVE, w, l]);
+  });
 
-   window.addEventListener('mousedown', function (e) { 
-     if (!ready() || e.target !== el) return; 
-     el.focus(); 
-     var m = e.button === 2 ? WM_RBUTTONDOWN : (e.button === 1 ? WM_MBUTTONDOWN : WM_LBUTTONDOWN); 
-     var w = e.button === 2 ? 2 : (e.button === 1 ? 16 : 1); 
-     push(m, w, pos(e)); 
-     e.preventDefault(); 
-   }); 
+  var VK = { 'Escape':0x1B,'Space':0x20,'Enter':0x0D,'Backspace':0x08,'Tab':0x09,
+  'ArrowLeft':0x25,'ArrowUp':0x26,'ArrowRight':0x27,'ArrowDown':0x28,
+  'KeyW':0x57,'KeyA':0x41,'KeyS':0x53,'KeyD':0x44,
+  'KeyQ':0x51,'KeyE':0x45,'KeyR':0x52,'KeyF':0x46,'KeyP':0x50 };
+  var SCAN = { 'Escape':0x01,'Space':0x39,'Enter':0x1C,'Backspace':0x0E,'Tab':0x0F,
+  'ArrowLeft':0x4B,'ArrowUp':0x48,'ArrowRight':0x4D,'ArrowDown':0x50,
+  'KeyW':0x11,'KeyA':0x1E,'KeyS':0x1F,'KeyD':0x20,
+  'KeyQ':0x10,'KeyE':0x12,'KeyR':0x13,'KeyF':0x21,'KeyP':0x19 };
+  var EXT = { 'ArrowLeft':1,'ArrowUp':1,'ArrowRight':1,'ArrowDown':1 };
+  Module.gdKeyState = new Uint8Array(256);
 
-   window.addEventListener('mouseup', function (e) { 
-     if (!ready()) return; 
-     var m = e.button === 2 ? WM_RBUTTONUP : (e.button === 1 ? WM_MBUTTONUP : WM_LBUTTONUP); 
-     push(m, 0, pos(e)); 
-     push(WM_MOUSEMOVE, 0, pos(e)); 
-     if (e.target === el) e.preventDefault(); 
-   }); 
+  function keyEvent(e, down) {
+    if (!ready()) return;
+    var vk = VK[e.code] || e.keyCode || 0;
+    if (down) {
+      var ch = 0;
+      if (e.key && e.key.length === 1) ch = e.key.charCodeAt(0);
+      else if (e.code === 'Backspace') ch = 0x08;
+      else if (e.code === 'Enter') ch = 0x0D;
+      if (ch) {
+        var clp = 1 | ((SCAN[e.code] || 0) << 16);
+        if (EXT[e.code]) clp |= 0x1000000;
+        push(0x0102, ch, clp);
+      }
+    }
+    if (!vk) return;
+    Module.gdKeyState[vk & 0xff] = down ? 1 : 0;
+    var scan = SCAN[e.code] || 0;
+    var lp = 1 | (scan << 16);
+    if (EXT[e.code]) lp |= 0x1000000;
+    if (!down) lp |= -1073741824;
+    push(down ? 0x100 : 0x101, vk, lp);
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) {
+      e.preventDefault();
+    }
+  }
 
-   window.addEventListener('mousemove', function (e) { 
-     if (!ready()) return; 
-     var q = Module.gdInputQueue; 
-     var w = (e.buttons & 1) ? 1 : 0, l = pos(e); 
-     if (q.length && q[q.length - 1][0] === WM_MOUSEMOVE) q[q.length - 1] = [WM_MOUSEMOVE, w, l]; 
-     else q.push([WM_MOUSEMOVE, w, l]); 
-   }); 
+  window.addEventListener('keydown', function (e) { keyEvent(e, true); });
+  window.addEventListener('keyup', function (e) { keyEvent(e, false); });
 
-   var VK = { 'Escape':0x1B,'Space':0x20,'Enter':0x0D,'Backspace':0x08,'Tab':0x09, 
-   'ArrowLeft':0x25,'ArrowUp':0x26,'ArrowRight':0x27,'ArrowDown':0x28, 
-   'KeyW':0x57,'KeyA':0x41,'KeyS':0x53,'KeyD':0x44, 
-   'KeyQ':0x51,'KeyE':0x45,'KeyR':0x52,'KeyF':0x46,'KeyP':0x50 }; 
-   var SCAN = { 'Escape':0x01,'Space':0x39,'Enter':0x1C,'Backspace':0x0E,'Tab':0x0F, 
-   'ArrowLeft':0x4B,'ArrowUp':0x48,'ArrowRight':0x4D,'ArrowDown':0x50, 
-   'KeyW':0x11,'KeyA':0x1E,'KeyS':0x1F,'KeyD':0x20, 
-   'KeyQ':0x10,'KeyE':0x12,'KeyR':0x13,'KeyF':0x21,'KeyP':0x19 }; 
-   var EXT = { 'ArrowLeft':1,'ArrowUp':1,'ArrowRight':1,'ArrowDown':1 }; 
-   Module.gdKeyState = new Uint8Array(256); 
-
-   function keyEvent(e, down) { 
-     if (!ready()) return; 
-     var vk = VK[e.code] || e.keyCode || 0; 
-     if (down) { 
-       var ch = 0; 
-       if (e.key && e.key.length === 1) ch = e.key.charCodeAt(0); 
-       else if (e.code === 'Backspace') ch = 0x08; 
-       else if (e.code === 'Enter') ch = 0x0D; 
-       if (ch) { 
-         var clp = 1 | ((SCAN[e.code] || 0) << 16); 
-         if (EXT[e.code]) clp |= 0x1000000; 
-         push(0x0102, ch, clp); 
-       } 
-     } 
-     if (!vk) return; 
-     Module.gdKeyState[vk & 0xff] = down ? 1 : 0; 
-     var scan = SCAN[e.code] || 0; 
-     var lp = 1 | (scan << 16); 
-     if (EXT[e.code]) lp |= 0x1000000; 
-     if (!down) lp |= -1073741824; 
-     push(down ? 0x100 : 0x101, vk, lp); 
-     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) { 
-       e.preventDefault(); 
-     } 
-   } 
-
-   window.addEventListener('keydown', function (e) { keyEvent(e, true); }); 
-   window.addEventListener('keyup', function (e) { keyEvent(e, false); }); 
-
-   el.addEventListener('contextmenu', function (e) { e.preventDefault(); }); 
- })(); 
- </script> 
- </body> 
- </html>
+  el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+})();
+</script>
+</body>
+</html>
