@@ -40,15 +40,26 @@ var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
 
 function formatProxyUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
-  if (rawUrl.indexOf('.php') >= 0 || rawUrl.indexOf('database') >= 0 || rawUrl.indexOf('boomlings.com') >= 0) {
-    if (rawUrl.indexOf(PROXY_BASE) === 0) return rawUrl;
-    var fullUrl = rawUrl;
-    if (fullUrl.indexOf('http') !== 0) {
-      var endpoint = fullUrl.split('?')[0].split('/').pop();
-      fullUrl = 'https://www.boomlings.com/database/' + endpoint;
-    }
-    return PROXY_BASE + encodeURIComponent(fullUrl);
+  
+  // Clean out any recursive proxy prefixes if already present
+  if (rawUrl.indexOf("gd-proxy.radekgaming67.workers.dev/?url=") >= 0) {
+    rawUrl = decodeURIComponent(rawUrl.split("?url=").pop());
   }
+
+  // Strip broken local/relative __proxy pathing injected by Emscripten
+  rawUrl = rawUrl.replace(/https?:\/\/[^\/]+\/__proxy\?url=/g, "");
+  rawUrl = rawUrl.replace(/^__proxy\?url=/g, "");
+
+  // If it targets Boomlings or PHP endpoints, force a clean full URL through Cloudflare
+  if (rawUrl.indexOf('boomlings.com') >= 0 || rawUrl.indexOf('.php') >= 0 || rawUrl.indexOf('database') >= 0) {
+    var cleanEndpoint = rawUrl;
+    if (cleanEndpoint.indexOf('http') !== 0) {
+      var fileName = cleanEndpoint.split('?')[0].split('/').pop();
+      cleanEndpoint = 'https://www.boomlings.com/database/' + fileName;
+    }
+    return PROXY_BASE + encodeURIComponent(cleanEndpoint);
+  }
+  
   return rawUrl;
 }
 
