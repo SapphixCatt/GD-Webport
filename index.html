@@ -169,24 +169,24 @@ var Module = {
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data') {
-      return 'https://raw.githubusercontent.com/SapphixCatt/GD-Webport/v0/gd_web.data';
+      return 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data';
     }
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var url = 'https://raw.githubusercontent.com/SapphixCatt/GD-Webport/v0/gd_web.wasm';
+    var url = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.wasm';
 
-    function instantiate(ab) {
-      return WebAssembly.instantiate(ab, imports).then(function (r) {
-        success(r.instance, r.module);
-      });
-    }
-    fetch(url).then(function (resp) {
-      if (!resp.ok) throw new Error('wasm HTTP ' + resp.status);
-      return resp.arrayBuffer().then(instantiate);
+    fetch(url, { mode: 'cors' }).then(function (resp) {
+      if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
+      return resp.arrayBuffer();
+    }).then(function (bytes) {
+      return WebAssembly.instantiate(bytes, imports);
+    }).then(function (output) {
+      success(output.instance, output.module);
     }).catch(function (err) {
       console.error('WASM Load Error:', err);
     });
+
     return {};
   },
   print: function (text) { console.log(text); },
