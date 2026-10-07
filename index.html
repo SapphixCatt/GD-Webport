@@ -43,25 +43,22 @@ canvas {
   function formatProxyUrl(rawUrl) {
     if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
     
-    // Prevent recursive proxy wrapping
+    // Prevent double proxying
     if (rawUrl.indexOf(PROXY_BASE) === 0) return rawUrl;
 
-    // Check if url targets GD server endpoints or relative PHP files
+    // Check if the request target is an online endpoint for GD
     var isGdRequest = rawUrl.indexOf('.php') >= 0 || 
-                      rawUrl.indexOf('database') >= 0 || 
-                      rawUrl.indexOf('boomlings.com') >= 0;
+                        rawUrl.indexOf('database') >= 0 || 
+                        rawUrl.indexOf('boomlings.com') >= 0;
 
     if (isGdRequest) {
       var fullUrl = rawUrl;
       
-      // Resolve relative path requests to full boomlings.com URLs
+      // If relative URL or host-less request, resolve against Boomlings base
       if (fullUrl.indexOf('http://') !== 0 && fullUrl.indexOf('https://') !== 0) {
         var cleanPath = fullUrl.split('?')[0];
         var endpoint = cleanPath.split('/').pop();
         fullUrl = 'https://www.boomlings.com/database/' + endpoint;
-        if (rawUrl.indexOf('?') >= 0) {
-          fullUrl += '?' + rawUrl.split('?')[1];
-        }
       }
       
       return PROXY_BASE + encodeURIComponent(fullUrl);
@@ -70,12 +67,10 @@ canvas {
     return rawUrl;
   }
 
-  // Intercept standard Fetch API
   var origFetch = window.fetch.bind(window);
   window.fetch = function(input, init) {
     var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
     var target = formatProxyUrl(url);
-    
     if (target !== url) {
       if (typeof input === 'string') {
         input = target;
@@ -86,7 +81,6 @@ canvas {
     return origFetch(input, init);
   };
 
-  // Intercept XMLHttpRequest (used by C++ / Emscripten sockets)
   var origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
     var target = formatProxyUrl(url);
