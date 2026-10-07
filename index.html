@@ -59,17 +59,19 @@ canvas {
     var url = (typeof input === 'string') ? input : (input && input.url);
     var target = formatProxyUrl(url);
     if (target !== url) {
-      if (typeof input === 'string') input = target;
-      else if (input && input.url) input = new Request(target, input);
+      if (typeof input === 'string') {
+        input = target;
+      } else if (input && input.url) {
+        input = new Request(target, input);
+      }
     }
     return origFetch(input, init);
   };
 
   var origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url) {
-    var args = Array.prototype.slice.call(arguments);
-    args[1] = formatProxyUrl(url);
-    return origOpen.apply(this, args);
+  XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
+    var target = formatProxyUrl(url);
+    return origOpen.call(this, method, target, async !== false, user, pass);
   };
 })();
 </script>
