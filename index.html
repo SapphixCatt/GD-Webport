@@ -129,26 +129,7 @@ var Module = {
   gdInputQueue: [],
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
-    if (path === 'gd_web.data') {
-      return 'https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@v0/gd_web.data';
-    }
     return (prefix || '') + path;
-  },
-  instantiateWasm: function (imports, success) {
-    var wasmUrl = 'https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@v0/gd_web.wasm';
-
-    fetch(wasmUrl).then(function (resp) {
-      if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
-      return resp.arrayBuffer();
-    }).then(function (bytes) {
-      return WebAssembly.instantiate(bytes, imports);
-    }).then(function (output) {
-      success(output.instance, output.module);
-    }).catch(function (err) {
-      console.error('WASM Load Error:', err);
-    });
-
-    return {};
   },
   print: function (text) { console.log(text); },
   printErr: function (text) { console.error(text); },
@@ -197,7 +178,6 @@ window.addEventListener('DOMContentLoaded', gdStart);
 </script>
 
 <script>
-// Input Event & Focus Handling
 (function () {
   const el = document.getElementById('canvas');
   const WM_MOUSEMOVE = 0x200, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202,
