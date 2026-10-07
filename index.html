@@ -34,47 +34,6 @@ canvas {
   touch-action: none;
 }
 </style>
-
-<script>
-// Intercept online GD level/account requests through Cloudflare Proxy
-(function() {
-  var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
-
-  function formatProxyUrl(rawUrl) {
-    if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
-    if (rawUrl.indexOf('.php') >= 0 || rawUrl.indexOf('database') >= 0 || rawUrl.indexOf('boomlings.com') >= 0) {
-      if (rawUrl.indexOf(PROXY_BASE) === 0) return rawUrl;
-      var fullUrl = rawUrl;
-      if (fullUrl.indexOf('http') !== 0) {
-        var endpoint = fullUrl.split('?')[0].split('/').pop();
-        fullUrl = 'https://www.boomlings.com/database/' + endpoint;
-      }
-      return PROXY_BASE + encodeURIComponent(fullUrl);
-    }
-    return rawUrl;
-  }
-
-  var origFetch = window.fetch.bind(window);
-  window.fetch = function(input, init) {
-    var url = (typeof input === 'string') ? input : (input && input.url);
-    var target = formatProxyUrl(url);
-    if (target !== url) {
-      if (typeof input === 'string') {
-        input = target;
-      } else if (input && input.url) {
-        input = new Request(target, input);
-      }
-    }
-    return origFetch(input, init);
-  };
-
-  var origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
-    var target = formatProxyUrl(url);
-    return origOpen.call(this, method, target, async !== false, user, pass);
-  };
-})();
-</script>
 </head>
 
 <body>
