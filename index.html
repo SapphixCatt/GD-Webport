@@ -36,7 +36,6 @@ canvas {
 </style>
 
 <script>
-// Global proxy formatter
 var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
 
 function formatProxyUrl(rawUrl) {
@@ -53,7 +52,6 @@ function formatProxyUrl(rawUrl) {
   return rawUrl;
 }
 
-// Intercept browser window fetch & XHR
 (function() {
   var origFetch = window.fetch.bind(window);
   window.fetch = function(input, init) {
@@ -198,7 +196,6 @@ var Module = {
   printErr: function (text) { console.error(text); },
   setStatus: function () {},
   preRun: [function() {
-    // Intercept Emscripten's internal wget/fetch/network utilities if defined
     if (typeof Module['_emscripten_async_wget_data'] !== 'undefined') {
       var origWget = Module['_emscripten_async_wget_data'];
       Module['_emscripten_async_wget_data'] = function(url, arg, onload, onerror) {
@@ -240,7 +237,6 @@ function gdStart() {
   fetch('gd_web.js', { cache: 'no-store' }).then(function (r) {
     return r.text();
   }).then(function (code) {
-    // Intercept string definitions inside gd_web.js BEFORE executing it
     code = code.replace(/https?:\/\/www\.boomlings\.com\/database\//g, function(match) {
       return PROXY_BASE + encodeURIComponent(match);
     });
@@ -258,7 +254,6 @@ window.addEventListener('DOMContentLoaded', gdStart);
 </script>
 
 <script>
-// Input Event & Focus Handling
 (function () {
   const el = document.getElementById('canvas');
   const WM_MOUSEMOVE = 0x200, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202,
