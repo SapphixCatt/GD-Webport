@@ -178,14 +178,14 @@ var Module = {
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data') {
-      return PROXY_BASE + encodeURIComponent('https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data');
+      return 'https://cdn.statically.io/gh/SapphixCatt/GD-Webport/v0/gd_web.data';
     }
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var proxyWasmUrl = PROXY_BASE + encodeURIComponent('https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.wasm');
+    var cdnWasmUrl = 'https://cdn.statically.io/gh/SapphixCatt/GD-Webport/v0/gd_web.wasm';
 
-    fetch(proxyWasmUrl).then(function (resp) {
+    fetch(cdnWasmUrl).then(function (resp) {
       if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
       return resp.arrayBuffer();
     }).then(function (bytes) {
