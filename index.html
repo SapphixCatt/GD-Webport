@@ -37,8 +37,7 @@ canvas {
 
 <script>
 var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
-var GITHUB_DATA_URL = "https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data";
-var VERCEL_WASM_BASE = "https://your-vercel-project.vercel.app"; // Replace with your actual Vercel project URL
+var GITHUB_DATA_URL = "https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@v0/gd_web.data";
 
 function formatProxyUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
@@ -64,7 +63,7 @@ function formatProxyUrl(rawUrl) {
   }
 
   if (rawUrl.indexOf('gd_web.wasm') >= 0) {
-    return VERCEL_WASM_BASE.replace(/\/$/, '') + '/gd_web.wasm';
+    return 'gd_web.wasm';
   }
   
   return rawUrl;
@@ -193,9 +192,7 @@ var Module = {
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var targetUrl = VERCEL_WASM_BASE.replace(/\/$/, '') + '/gd_web.wasm';
-
-    fetch(targetUrl).then(function (resp) {
+    fetch('gd_web.wasm').then(function (resp) {
       if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
       return resp.arrayBuffer();
     }).then(function (bytes) {
@@ -250,7 +247,7 @@ function gdStart() {
   window.__gdInputReady = true;
   var c = document.getElementById('canvas');
   if (c) c.focus();
-  fetch('https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@main/gd_web.js', { cache: 'no-store' }).then(function (r) {
+  fetch('gd_web.js', { cache: 'no-store' }).then(function (r) {
     return r.text();
   }).then(function (code) {
     code = code.replace(/https?:\/\/www\.boomlings\.com\/database\//g, function(match) {
