@@ -41,16 +41,13 @@ var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
 function formatProxyUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
   
-  // Clean out any recursive proxy prefixes if already present
   if (rawUrl.indexOf("gd-proxy.radekgaming67.workers.dev/?url=") >= 0) {
     rawUrl = decodeURIComponent(rawUrl.split("?url=").pop());
   }
 
-  // Strip broken local/relative __proxy pathing injected by Emscripten
   rawUrl = rawUrl.replace(/https?:\/\/[^\/]+\/__proxy\?url=/g, "");
   rawUrl = rawUrl.replace(/^__proxy\?url=/g, "");
 
-  // If it targets Boomlings or PHP endpoints, force a clean full URL through Cloudflare
   if (rawUrl.indexOf('boomlings.com') >= 0 || rawUrl.indexOf('.php') >= 0 || rawUrl.indexOf('database') >= 0) {
     var cleanEndpoint = rawUrl;
     if (cleanEndpoint.indexOf('http') !== 0) {
@@ -181,16 +178,14 @@ var Module = {
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data') {
-      var target = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.data';
-      return PROXY_BASE + encodeURIComponent(target);
+      return 'https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@v0/gd_web.data';
     }
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var target = 'https://github.com/SapphixCatt/GD-Webport/releases/download/v0/gd_web.wasm';
-    var proxyUrl = PROXY_BASE + encodeURIComponent(target);
+    var cdnWasmUrl = 'https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@v0/gd_web.wasm';
 
-    fetch(proxyUrl).then(function (resp) {
+    fetch(cdnWasmUrl).then(function (resp) {
       if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
       return resp.arrayBuffer();
     }).then(function (bytes) {
