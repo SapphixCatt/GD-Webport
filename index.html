@@ -42,34 +42,21 @@ canvas {
 
   function formatProxyUrl(rawUrl) {
     if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
-    
-    // Prevent double proxying
-    if (rawUrl.indexOf(PROXY_BASE) === 0) return rawUrl;
-
-    // Check if the request target is an online endpoint for GD
-    var isGdRequest = rawUrl.indexOf('.php') >= 0 || 
-                        rawUrl.indexOf('database') >= 0 || 
-                        rawUrl.indexOf('boomlings.com') >= 0;
-
-    if (isGdRequest) {
+    if (rawUrl.indexOf('.php') >= 0 || rawUrl.indexOf('database') >= 0 || rawUrl.indexOf('boomlings.com') >= 0) {
+      if (rawUrl.indexOf(PROXY_BASE) === 0) return rawUrl;
       var fullUrl = rawUrl;
-      
-      // If relative URL or host-less request, resolve against Boomlings base
-      if (fullUrl.indexOf('http://') !== 0 && fullUrl.indexOf('https://') !== 0) {
-        var cleanPath = fullUrl.split('?')[0];
-        var endpoint = cleanPath.split('/').pop();
+      if (fullUrl.indexOf('http') !== 0) {
+        var endpoint = fullUrl.split('?')[0].split('/').pop();
         fullUrl = 'https://www.boomlings.com/database/' + endpoint;
       }
-      
       return PROXY_BASE + encodeURIComponent(fullUrl);
     }
-    
     return rawUrl;
   }
 
   var origFetch = window.fetch.bind(window);
   window.fetch = function(input, init) {
-    var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
+    var url = (typeof input === 'string') ? input : (input && input.url);
     var target = formatProxyUrl(url);
     if (target !== url) {
       if (typeof input === 'string') {
