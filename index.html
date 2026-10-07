@@ -37,6 +37,7 @@ canvas {
 
 <script>
 var PROXY_BASE = "https://gd-proxy.radekgaming67.workers.dev/?url=";
+var CDN_BASE = "https://cdn.jsdelivr.net/gh/SapphixCatt/GD-Webport@main/";
 
 function formatProxyUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
@@ -55,6 +56,11 @@ function formatProxyUrl(rawUrl) {
       cleanEndpoint = 'https://www.boomlings.com/database/' + fileName;
     }
     return PROXY_BASE + encodeURIComponent(cleanEndpoint);
+  }
+
+  if (rawUrl.indexOf('gd_web.data') >= 0 || rawUrl.indexOf('gd_web.wasm') >= 0) {
+    var file = rawUrl.split('/').pop().split('?')[0];
+    return CDN_BASE + file;
   }
   
   return rawUrl;
@@ -178,14 +184,14 @@ var Module = {
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data') {
-      return 'https://sapphixcatt.github.io/GD-Webport/gd_web.data';
+      return CDN_BASE + 'gd_web.data';
     }
     return (prefix || '') + path;
   },
   instantiateWasm: function (imports, success) {
-    var officialWasmUrl = 'https://sapphixcatt.github.io/GD-Webport/gd_web.wasm';
+    var targetUrl = CDN_BASE + 'gd_web.wasm';
 
-    fetch(officialWasmUrl).then(function (resp) {
+    fetch(targetUrl).then(function (resp) {
       if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
       return resp.arrayBuffer();
     }).then(function (bytes) {
@@ -240,7 +246,7 @@ function gdStart() {
   window.__gdInputReady = true;
   var c = document.getElementById('canvas');
   if (c) c.focus();
-  fetch('https://sapphixcatt.github.io/GD-Webport/gd_web.js', { cache: 'no-store' }).then(function (r) {
+  fetch(CDN_BASE + 'gd_web.js', { cache: 'no-store' }).then(function (r) {
     return r.text();
   }).then(function (code) {
     code = code.replace(/https?:\/\/www\.boomlings\.com\/database\//g, function(match) {
