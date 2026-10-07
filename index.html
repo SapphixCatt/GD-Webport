@@ -33,10 +33,23 @@ canvas {
   user-select: none;
   touch-action: none;
 }
+#loading-overlay {
+  position: absolute;
+  color: #fff;
+  font-family: monospace;
+  font-size: 18px;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+}
 </style>
 </head>
 
 <body>
+<div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
 <script>
@@ -121,6 +134,28 @@ function restoreSaves(then) {
   } catch (e) { finish(); }
 }
 
+var gdDataBlobUrl = null;
+
+async function fetchLfsDataFile() {
+  const overlay = document.getElementById('loading-overlay');
+  
+  // Direct raw media endpoint for Git LFS objects on GitHub
+  const lfsUrl = 'https://media.githubusercontent.com/media/SapphixCatt/GD-Webport/main/gd_web.data';
+  
+  if (overlay) overlay.innerText = 'Downloading 314 MB Game Data...';
+  
+  const resp = await fetch(lfsUrl);
+  if (!resp.ok) {
+    // Fallback to local path if media endpoint is unavailable
+    console.warn('LFS media endpoint fetch failed, trying local fallback.');
+    return 'gd_web.data';
+  }
+  
+  const blob = await resp.blob();
+  gdDataBlobUrl = URL.createObjectURL(blob);
+  return gdDataBlobUrl;
+}
+
 var Module = {
   canvas: (function() {
     var c = document.getElementById('canvas');
@@ -129,29 +164,28 @@ var Module = {
   gdInputQueue: [],
   gdCursorPos: [0, 0],
   locateFile: function (path, prefix) {
+    if (path === 'gd_web.data' || path.endsWith('.data')) {
+      return gdDataBlobUrl || 'gd_web.data';
+    }
     return (prefix || '') + path;
-  },
-  instantiateWasm: function (imports, success) {
-    var wasmUrl = 'gd_web.wasm';
-
-    fetch(wasmUrl).then(function (resp) {
-      if (!resp.ok) throw new Error('WASM HTTP fetch failed with status ' + resp.status);
-      return resp.arrayBuffer();
-    }).then(function (bytes) {
-      return WebAssembly.instantiate(bytes, imports);
-    }).then(function (output) {
-      success(output.instance, output.module);
-    }).catch(function (err) {
-      console.error('WASM Load Error:', err);
-    });
-
-    return {};
   },
   print: function (text) { console.log(text); },
   printErr: function (text) { console.error(text); },
-  setStatus: function () {},
+  setStatus: function (text) {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+      if (!text) {
+        overlay.style.display = 'none';
+      } else {
+        overlay.innerText = text;
+      }
+    }
+  },
   onRuntimeInitialized: function () {
     window.__gdRuntimeReady = true;
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'none';
+
     if (Module._gd_autosave_set) Module._gd_autosave_set(1);
     if (Module.FS) {
       var origWrite = Module.FS.writeFile;
@@ -176,11 +210,18 @@ var Module = {
   }
 };
 
-function gdStart() {
+async function gdStart() {
   window.__gdLoadStarted = true;
   window.__gdInputReady = true;
   var c = document.getElementById('canvas');
   if (c) c.focus();
+  
+  try {
+    await fetchLfsDataFile();
+  } catch (err) {
+    console.error('Failed to load LFS data file:', err);
+  }
+
   fetch('gd_web.js', { cache: 'no-store' }).then(function (r) {
     return r.text();
   }).then(function (code) {
@@ -219,7 +260,7 @@ window.addEventListener('DOMContentLoaded', gdStart);
       offsetY = r.top + (r.height - renderHeight) / 2;
     }
     const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
     const x = Math.max(0, Math.min(1919, Math.round((clientX - offsetX) * 1920 / renderWidth)));
     const y = Math.max(0, Math.min(1079, Math.round((clientY - offsetY) * 1080 / renderHeight)));
     Module.gdCursorPos[0] = x;
