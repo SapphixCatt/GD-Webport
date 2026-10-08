@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -19,7 +18,7 @@ app.use(async (req, res) => {
     return res.status(200).send('GD Proxy Server is Running!');
   }
 
-  // Strictly extract standard .php filenames (strip out 2F or path prefixing)
+  // Extract PHP endpoint
   const match = rawUrl.match(/([a-zA-Z0-9_-]+\.php)/i);
   const endpoint = match ? match[1] : '';
 
@@ -31,35 +30,39 @@ app.use(async (req, res) => {
   console.log(`[PROXY REQUEST] ${req.method} -> ${targetUrl}`);
 
   try {
-    const headers = {
-      'User-Agent': '', // GD client uses empty user agent to pass Boomlings checks
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Host': 'www.boomlings.com',
-      'Accept': '*/*'
-    };
-
-    if (req.method === 'POST' && req.body && Buffer.isBuffer(req.body)) {
-      headers['Content-Length'] = req.body.length.toString();
-    }
+    // Dynamic import for ESM package got-scraping
+    const { gotScraping } = await import('got-scraping');
 
     const options = {
+      url: targetUrl,
       method: req.method,
-      headers: headers
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'user-agent': 'GeometryDash/2.200',
+        'host': 'www.boomlings.com',
+        'accept': '*/*'
+      },
+      headerGeneratorOptions: {
+        browsers: [{ name: 'chrome', minVersion: 110 }],
+        devices: ['desktop'],
+        locales: ['en-US'],
+        operatingSystems: ['windows']
+      },
+      responseType: 'buffer',
+      throwHttpErrors: false
     };
 
     if (req.method === 'POST' && req.body && req.body.length > 0) {
       options.body = req.body;
     }
 
-    const response = await fetch(targetUrl, options);
-    const arrayBuffer = await response.arrayBuffer();
-    const data = Buffer.from(arrayBuffer);
+    const response = await gotScraping(options);
 
-    console.log(`[PROXY SUCCESS] ${req.method} ${targetUrl} -> HTTP ${response.status}`);
+    console.log(`[PROXY SUCCESS] ${req.method} ${targetUrl} -> HTTP ${response.statusCode}`);
 
-    res.status(response.status);
+    res.status(response.statusCode);
     res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-    res.send(data);
+    res.send(response.body);
   } catch (err) {
     console.error(`[PROXY ERROR] ${targetUrl}:`, err.message);
     res.status(500).send('-1');
