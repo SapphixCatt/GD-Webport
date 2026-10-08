@@ -59,7 +59,9 @@ canvas {
 
     function extractPhpEndpoint(inputUrl) {
         if (!inputUrl) return null;
-        const str = String(inputUrl);
+        let str = String(inputUrl);
+        try { str = decodeURIComponent(str); } catch(e) {}
+        // Strict match for standard GD PHP files without leading 2F or encoding artifacts
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
