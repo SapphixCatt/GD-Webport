@@ -7,25 +7,24 @@ const PORT = process.env.PORT || 8080;
 
 app.use(cors());
 
-// Parse raw binary/buffer bodies sent by GD
+// Express parses raw binary/buffer bodies sent by GD
 app.use(express.raw({ type: '*/*', limit: '10mb' }));
 
 app.use(async (req, res, next) => {
   const rawUrl = req.url;
 
-  if (rawUrl === '/' || rawUrl === '') {
+  // Only return the status message if someone visits the exact root via a browser GET request
+  if ((rawUrl === '/' || rawUrl === '') && req.method === 'GET') {
     return res.status(200).send('GD Proxy Server is Running!');
-  }
-
-  if (!rawUrl.includes('__proxy') && !rawUrl.includes('__gdproxy') && !rawUrl.includes('.php')) {
-    return next();
   }
 
   let targetUrl = '';
 
+  // 1. Handle explicit proxy URL query parameter
   if (req.query && req.query.url) {
     targetUrl = decodeURIComponent(req.query.url);
   } else {
+    // 2. Parse path and extract endpoint
     const urlParts = rawUrl.split('?');
     const queryString = urlParts[1] ? `?${urlParts[1]}` : '';
     let cleanPath = urlParts[0];
@@ -33,12 +32,9 @@ app.use(async (req, res, next) => {
     let parts = cleanPath.split('/').filter(Boolean);
     let endpoint = parts[parts.length - 1] || '';
 
-    if (!endpoint || endpoint === '__proxy' || endpoint === '__gdproxy') {
-      return res.status(400).send('-1');
-    }
-
-    if (!endpoint.endsWith('.php')) {
-      endpoint += '.php';
+    // If no .php endpoint was requested, skip proxying
+    if (!endpoint || !endpoint.includes('.php')) {
+      return next();
     }
 
     targetUrl = `https://www.boomlings.com/database/${endpoint}${queryString}`;
@@ -48,21 +44,24 @@ app.use(async (req, res, next) => {
 
   try {
     const headers = {
-      'User-Agent': 'GeometryDash/2.2',
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': '',
+      'Content-Type': req.headers['content-type'] || 'application/x-www-form-urlencoded',
       'Host': 'www.boomlings.com',
       'Accept': '*/*',
       'Connection': 'keep-alive'
     };
+
+    if (req.method === 'POST' && req.body && Buffer.isBuffer(req.body)) {
+      headers['Content-Length'] = req.body.length.toString();
+    }
 
     const options = {
       method: req.method,
       headers: headers
     };
 
-    if (req.method === 'POST' && req.body && Buffer.isBuffer(req.body)) {
+    if (req.method === 'POST' && req.body && req.body.length > 0) {
       options.body = req.body;
-      headers['Content-Length'] = req.body.length.toString();
     }
 
     const response = await fetch(targetUrl, options);
