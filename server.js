@@ -5,35 +5,23 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Enable CORS for all incoming browser requests
 app.use(cors());
-
-// Parse raw binary/text buffer bodies sent by GD POST calls
 app.use(express.raw({ type: '*/*', limit: '10mb' }));
 
 app.use(async (req, res) => {
   const rawUrl = req.url;
 
-  // 1. Root diagnostic page: strictly return text ONLY on GET /
+  // Root status check
   if ((rawUrl === '/' || rawUrl === '') && req.method === 'GET') {
     return res.status(200).send('GD Proxy Server is Running!');
   }
 
-  // 2. Extract the target PHP endpoint from path or query string
-  let endpoint = '';
-  if (req.query && req.query.url) {
-    const decoded = decodeURIComponent(req.query.url);
-    endpoint = decoded.split('/').pop();
-  } else {
-    const urlParts = rawUrl.split('?');
-    const cleanPath = urlParts[0];
-    const parts = cleanPath.split('/').filter(Boolean);
-    endpoint = parts[parts.length - 1] || '';
-  }
+  // Extract the target filename (e.g. getGJLevels21.php)
+  const match = rawUrl.match(/([a-zA-Z0-9_-]+\.php)/i);
+  const endpoint = match ? match[1] : '';
 
-  // Ensure endpoint ends with .php
-  if (!endpoint.endsWith('.php')) {
-    endpoint += '.php';
+  if (!endpoint) {
+    return res.status(404).send('-1');
   }
 
   const targetUrl = `https://www.boomlings.com/database/${endpoint}`;
@@ -41,11 +29,10 @@ app.use(async (req, res) => {
 
   try {
     const headers = {
-      'User-Agent': '',
+      'User-Agent': 'Geometry Dash / WASM',
       'Content-Type': req.headers['content-type'] || 'application/x-www-form-urlencoded',
       'Host': 'www.boomlings.com',
-      'Accept': '*/*',
-      'Connection': 'keep-alive'
+      'Accept': '*/*'
     };
 
     if (req.method === 'POST' && req.body && Buffer.isBuffer(req.body)) {
