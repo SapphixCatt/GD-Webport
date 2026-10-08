@@ -9,14 +9,17 @@ app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '10mb' }));
 
 app.use(async (req, res) => {
-  const rawUrl = req.url;
+  let rawUrl = req.url;
+  try {
+    rawUrl = decodeURIComponent(rawUrl);
+  } catch (e) {}
 
   // Root status check
   if ((rawUrl === '/' || rawUrl === '') && req.method === 'GET') {
     return res.status(200).send('GD Proxy Server is Running!');
   }
 
-  // Extract the target filename (e.g. getGJLevels21.php)
+  // Strictly extract standard .php filenames (strip out 2F or path prefixing)
   const match = rawUrl.match(/([a-zA-Z0-9_-]+\.php)/i);
   const endpoint = match ? match[1] : '';
 
@@ -29,8 +32,8 @@ app.use(async (req, res) => {
 
   try {
     const headers = {
-      'User-Agent': 'Geometry Dash / WASM',
-      'Content-Type': req.headers['content-type'] || 'application/x-www-form-urlencoded',
+      'User-Agent': '', // GD client uses empty user agent to pass Boomlings checks
+      'Content-Type': 'application/x-www-form-urlencoded',
       'Host': 'www.boomlings.com',
       'Accept': '*/*'
     };
