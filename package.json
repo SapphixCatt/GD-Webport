@@ -1,7 +1,7 @@
 {
   "name": "gd-proxy-server",
   "version": "1.0.0",
-  "description": "GD Webport CORS and Cloudflare Bypass Proxy",
+  "description": "GD Webport CORS and Reverse Proxy Server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,6 +9,6 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "got-scraping": "^1.4.6"
+    "node-fetch": "^2.6.9"
   }
 }
