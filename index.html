@@ -52,7 +52,7 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Network Proxy Interceptor for Online Features -->
+<!-- Network Proxy Interceptor -->
 <script>
 (function() {
     const PROXY_URL = "https://gd-webport.onrender.com";
@@ -62,7 +62,7 @@ canvas {
         let url = typeof resource === 'string' ? resource : (resource ? resource.url : '');
 
         if (url && (url.includes('boomlings.com') || url.includes('.php'))) {
-            const endpoint = url.split('/').pop();
+            const endpoint = url.split('/').pop().split('?')[0];
             const targetUrl = `${PROXY_URL}/${endpoint}`;
             
             if (typeof resource === 'string') {
@@ -78,7 +78,7 @@ canvas {
     const originalOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
         if (typeof url === 'string' && (url.includes('boomlings.com') || url.includes('.php'))) {
-            const endpoint = url.split('/').pop();
+            const endpoint = url.split('/').pop().split('?')[0];
             const targetUrl = `${PROXY_URL}/${endpoint}`;
             url = targetUrl;
         }
@@ -174,14 +174,12 @@ var gdDataBlobUrl = null;
 async function fetchLfsDataFile() {
   const overlay = document.getElementById('loading-overlay');
   
-  // Direct raw media endpoint for Git LFS objects on GitHub
   const lfsUrl = 'https://media.githubusercontent.com/media/SapphixCatt/GD-Webport/main/gd_web.data';
   
   if (overlay) overlay.innerText = 'Downloading 314 MB Game Data...';
   
   const resp = await fetch(lfsUrl);
   if (!resp.ok) {
-    // Fallback to local path if media endpoint is unavailable
     console.warn('LFS media endpoint fetch failed, trying local fallback.');
     return 'gd_web.data';
   }
