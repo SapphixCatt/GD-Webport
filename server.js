@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -13,12 +14,12 @@ app.use(async (req, res) => {
     rawUrl = decodeURIComponent(rawUrl);
   } catch (e) {}
 
-  // Root status check
+  // Root diagnostic status check
   if ((rawUrl === '/' || rawUrl === '') && req.method === 'GET') {
     return res.status(200).send('GD Proxy Server is Running!');
   }
 
-  // Extract PHP endpoint
+  // Strictly match valid GD PHP endpoints
   const match = rawUrl.match(/([a-zA-Z0-9_-]+\.php)/i);
   const endpoint = match ? match[1] : '';
 
@@ -30,39 +31,35 @@ app.use(async (req, res) => {
   console.log(`[PROXY REQUEST] ${req.method} -> ${targetUrl}`);
 
   try {
-    // Dynamic import for ESM package got-scraping
-    const { gotScraping } = await import('got-scraping');
+    const headers = {
+      'User-Agent': '',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Host': 'www.boomlings.com',
+      'Accept': '*/*'
+    };
+
+    if (req.method === 'POST' && req.body && Buffer.isBuffer(req.body)) {
+      headers['Content-Length'] = req.body.length.toString();
+    }
 
     const options = {
-      url: targetUrl,
       method: req.method,
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        'user-agent': 'GeometryDash/2.200',
-        'host': 'www.boomlings.com',
-        'accept': '*/*'
-      },
-      headerGeneratorOptions: {
-        browsers: [{ name: 'chrome', minVersion: 110 }],
-        devices: ['desktop'],
-        locales: ['en-US'],
-        operatingSystems: ['windows']
-      },
-      responseType: 'buffer',
-      throwHttpErrors: false
+      headers: headers
     };
 
     if (req.method === 'POST' && req.body && req.body.length > 0) {
       options.body = req.body;
     }
 
-    const response = await gotScraping(options);
+    const response = await fetch(targetUrl, options);
+    const arrayBuffer = await response.arrayBuffer();
+    const data = Buffer.from(arrayBuffer);
 
-    console.log(`[PROXY SUCCESS] ${req.method} ${targetUrl} -> HTTP ${response.statusCode}`);
+    console.log(`[PROXY SUCCESS] ${req.method} ${targetUrl} -> HTTP ${response.status}`);
 
-    res.status(response.statusCode);
+    res.status(response.status);
     res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-    res.send(response.body);
+    res.send(data);
   } catch (err) {
     console.error(`[PROXY ERROR] ${targetUrl}:`, err.message);
     res.status(500).send('-1');
