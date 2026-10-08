@@ -5,41 +5,38 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// Enable CORS for all incoming browser requests
 app.use(cors());
 
-// Express parses raw binary/buffer bodies sent by GD
+// Parse raw binary/text buffer bodies sent by GD POST calls
 app.use(express.raw({ type: '*/*', limit: '10mb' }));
 
-app.use(async (req, res, next) => {
+app.use(async (req, res) => {
   const rawUrl = req.url;
 
-  // Only return the status message if someone visits the exact root via a browser GET request
+  // 1. Root diagnostic page: strictly return text ONLY on GET /
   if ((rawUrl === '/' || rawUrl === '') && req.method === 'GET') {
     return res.status(200).send('GD Proxy Server is Running!');
   }
 
-  let targetUrl = '';
-
-  // 1. Handle explicit proxy URL query parameter
+  // 2. Extract the target PHP endpoint from path or query string
+  let endpoint = '';
   if (req.query && req.query.url) {
-    targetUrl = decodeURIComponent(req.query.url);
+    const decoded = decodeURIComponent(req.query.url);
+    endpoint = decoded.split('/').pop();
   } else {
-    // 2. Parse path and extract endpoint
     const urlParts = rawUrl.split('?');
-    const queryString = urlParts[1] ? `?${urlParts[1]}` : '';
-    let cleanPath = urlParts[0];
-    
-    let parts = cleanPath.split('/').filter(Boolean);
-    let endpoint = parts[parts.length - 1] || '';
-
-    // If no .php endpoint was requested, skip proxying
-    if (!endpoint || !endpoint.includes('.php')) {
-      return next();
-    }
-
-    targetUrl = `https://www.boomlings.com/database/${endpoint}${queryString}`;
+    const cleanPath = urlParts[0];
+    const parts = cleanPath.split('/').filter(Boolean);
+    endpoint = parts[parts.length - 1] || '';
   }
 
+  // Ensure endpoint ends with .php
+  if (!endpoint.endsWith('.php')) {
+    endpoint += '.php';
+  }
+
+  const targetUrl = `https://www.boomlings.com/database/${endpoint}`;
   console.log(`[PROXY REQUEST] ${req.method} -> ${targetUrl}`);
 
   try {
