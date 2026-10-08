@@ -1,32 +1,35 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-const path = require('path');
 
 const app = express();
+const PORT = process.env.PORT || 8080;
+
 app.use(cors());
 
 // Parse raw binary/buffer bodies sent by GD
 app.use(express.raw({ type: '*/*', limit: '10mb' }));
 
-app.use(express.static('.'));
-
 app.use(async (req, res, next) => {
   const rawUrl = req.url;
 
-  // Check if request is targeting proxy paths or PHP endpoints
+  if (rawUrl === '/' || rawUrl === '') {
+    return res.status(200).send('GD Proxy Server is Running!');
+  }
+
   if (!rawUrl.includes('__proxy') && !rawUrl.includes('__gdproxy') && !rawUrl.includes('.php')) {
     return next();
   }
 
   let targetUrl = '';
 
-  // Case 1: URL passed via query parameter (e.g. /__proxy?url=https%3A%2F%2F...)
   if (req.query && req.query.url) {
     targetUrl = decodeURIComponent(req.query.url);
   } else {
-    // Case 2: Direct endpoint path (e.g. /getGJLevels21.php or /__gdproxy/getGJLevels21.php)
-    let cleanPath = rawUrl.split('?')[0];
+    const urlParts = rawUrl.split('?');
+    const queryString = urlParts[1] ? `?${urlParts[1]}` : '';
+    let cleanPath = urlParts[0];
+    
     let parts = cleanPath.split('/').filter(Boolean);
     let endpoint = parts[parts.length - 1] || '';
 
@@ -38,16 +41,18 @@ app.use(async (req, res, next) => {
       endpoint += '.php';
     }
 
-    targetUrl = `https://www.boomlings.com/database/${endpoint}`;
+    targetUrl = `https://www.boomlings.com/database/${endpoint}${queryString}`;
   }
 
   console.log(`[PROXY REQUEST] ${req.method} -> ${targetUrl}`);
 
   try {
     const headers = {
-      'User-Agent': '',
+      'User-Agent': 'GeometryDash/2.2',
       'Content-Type': 'application/x-www-form-urlencoded',
-      'Host': 'www.boomlings.com'
+      'Host': 'www.boomlings.com',
+      'Accept': '*/*',
+      'Connection': 'keep-alive'
     };
 
     const options = {
@@ -55,12 +60,14 @@ app.use(async (req, res, next) => {
       headers: headers
     };
 
-    if (req.method === 'POST' && req.body && req.body.length > 0) {
+    if (req.method === 'POST' && req.body && Buffer.isBuffer(req.body)) {
       options.body = req.body;
+      headers['Content-Length'] = req.body.length.toString();
     }
 
     const response = await fetch(targetUrl, options);
-    const data = await response.buffer();
+    const arrayBuffer = await response.arrayBuffer();
+    const data = Buffer.from(arrayBuffer);
 
     console.log(`[PROXY SUCCESS] ${req.method} ${targetUrl} -> HTTP ${response.status}`);
 
@@ -73,10 +80,6 @@ app.use(async (req, res, next) => {
   }
 });
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.listen(8080, () => {
-  console.log('GD Proxy Server running at http://localhost:8080');
+app.listen(PORT, () => {
+  console.log(`GD Proxy Server running on port ${PORT}`);
 });
