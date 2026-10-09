@@ -52,16 +52,16 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Network Proxy Interceptor -->
+<!-- GitHub Route Interceptor -->
 <script>
 (function() {
-    const PROXY_URL = "https://gd-webport.onrender.com";
+    // Points directly to raw GitHub content under your user/repo name
+    const GITHUB_BASE_URL = "https://raw.githubusercontent.com/SapphixCatt/GD-Webport/main/api-cache";
 
     function extractPhpEndpoint(inputUrl) {
         if (!inputUrl) return null;
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
-        // Strict match for standard GD PHP files without leading 2F or encoding artifacts
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
@@ -72,7 +72,8 @@ canvas {
         const endpoint = extractPhpEndpoint(urlStr);
 
         if (endpoint) {
-            const targetUrl = `${PROXY_URL}/${endpoint}`;
+            // Map request to the GitHub raw storage path for cached responses
+            const targetUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
             if (typeof resource === 'string') {
                 resource = targetUrl;
             } else if (resource && resource.url) {
@@ -87,7 +88,7 @@ canvas {
     XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
         const endpoint = extractPhpEndpoint(url);
         if (endpoint) {
-            url = `${PROXY_URL}/${endpoint}`;
+            url = `${GITHUB_BASE_URL}/${endpoint}.txt`;
         }
         return originalOpen.call(this, method, url, async, user, password);
     };
@@ -342,7 +343,7 @@ window.addEventListener('DOMContentLoaded', gdStart);
   var VK = { 'Escape':0x1B,'Space':0x20,'Enter':0x0D,'Backspace':0x08,'Tab':0x09,
   'ArrowLeft':0x25,'ArrowUp':0x26,'ArrowRight':0x27,'ArrowDown':0x28,
   'KeyW':0x57,'KeyA':0x41,'KeyS':0x53,'KeyD':0x44,
-  'KeyQ':0x51,'KeyE':0x45,'KeyR':0x52,'KeyF':0x46,'KeyP':0x50 };
+  'KeyQ':0x51,'KeyE':0x12,'KeyR':0x13,'KeyF':0x21,'KeyP':0x19 };
   var SCAN = { 'Escape':0x01,'Space':0x39,'Enter':0x1C,'Backspace':0x0E,'Tab':0x0F,
   'ArrowLeft':0x4B,'ArrowUp':0x48,'ArrowRight':0x4D,'ArrowDown':0x50,
   'KeyW':0x11,'KeyA':0x1E,'KeyS':0x1F,'KeyD':0x20,
