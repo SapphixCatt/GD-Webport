@@ -52,25 +52,37 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Direct Fly.io Proxy Network Interceptor -->
+<!-- Network Interceptor -->
 <script>
 (function() {
     const WORKER_URL = "https://gd-proxy.fly.dev";
 
-    function extractPhpEndpoint(inputUrl) {
+    function extractPath(inputUrl) {
         if (!inputUrl) return null;
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
+
+        // Handle direct Newgrounds MP3 audio streams
+        if (str.includes('newgrounds.com') || str.includes('ungrounded.net') || str.endsWith('.mp3')) {
+            return `?songUrl=${encodeURIComponent(str)}`;
+        }
+
+        // Handle accounts vs database PHP endpoints
+        if (str.includes('/accounts/')) {
+            const match = str.match(/\/accounts\/([a-zA-Z0-9_-]+\.php)/i);
+            return match ? `accounts/${match[1]}` : null;
+        }
+
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
 
-    async function fetchWithWorker(endpoint, init) {
-        const proxyTarget = `${WORKER_URL}/${endpoint}`;
+    async function fetchWithWorker(path, init) {
+        const proxyTarget = `${WORKER_URL}/${path}`;
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
 
             const modifiedInit = Object.assign({}, init || {}, {
                 signal: controller.signal
@@ -83,7 +95,7 @@ canvas {
                 return res;
             }
         } catch (e) {
-            console.warn("Fly.io proxy fetch failed.");
+            console.warn("Proxy fetch failed:", e);
         }
 
         return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
@@ -92,10 +104,10 @@ canvas {
     const originalFetch = window.fetch;
     window.fetch = async function(resource, init) {
         let urlStr = typeof resource === 'string' ? resource : (resource ? resource.url : '');
-        const endpoint = extractPhpEndpoint(urlStr);
+        const path = extractPath(urlStr);
 
-        if (endpoint) {
-            return fetchWithWorker(endpoint, init);
+        if (path) {
+            return fetchWithWorker(path, init);
         }
 
         return originalFetch.apply(this, arguments);
@@ -103,9 +115,9 @@ canvas {
 
     const originalOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
-        const endpoint = extractPhpEndpoint(url);
-        if (endpoint) {
-            this.__gdEndpoint = endpoint;
+        const path = extractPath(url);
+        if (path) {
+            this.__gdEndpoint = path;
             this.__gdMethod = method;
         }
         return originalOpen.call(this, method, url, async, user, password);
