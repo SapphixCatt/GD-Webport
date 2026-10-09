@@ -52,9 +52,10 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- GitHub Static & Network Interceptor -->
+<!-- Cloudflare Worker Route Interceptor -->
 <script>
 (function() {
+    const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
     const GITHUB_BASE_URL = "https://raw.githubusercontent.com/SapphixCatt/GD-Webport/main/api-cache";
 
     function extractPhpEndpoint(inputUrl) {
@@ -65,17 +66,35 @@ canvas {
         return match ? match[1] : null;
     }
 
-    async function fetchWithFallback(endpoint, init) {
-        // Fallback: Fetch directly from repository cache (using GET to bypass GitHub 403 on POST)
+    async function fetchWithWorker(endpoint, init) {
+        // Route directly through your deployed Cloudflare Worker
+        const proxyTarget = `${WORKER_URL}/${endpoint}`;
+        
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+            const modifiedInit = Object.assign({}, init || {}, {
+                signal: controller.signal
+            });
+
+            const res = await originalFetch(proxyTarget, modifiedInit);
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+                return res;
+            }
+        } catch (e) {
+            console.warn("Cloudflare Worker fetch failed, trying repository cache fallback...");
+        }
+
+        // Fallback to repository cache if Worker network drops
         const githubCacheUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
         try {
             const cacheRes = await originalFetch(githubCacheUrl, { method: 'GET' });
-            if (cacheRes.ok) {
-                return cacheRes;
-            }
+            if (cacheRes.ok) return cacheRes;
         } catch(e) {}
 
-        // Return native GD error response (-1) if endpoint data isn't available
         return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
     }
 
@@ -85,7 +104,7 @@ canvas {
         const endpoint = extractPhpEndpoint(urlStr);
 
         if (endpoint) {
-            return fetchWithFallback(endpoint, init);
+            return fetchWithWorker(endpoint, init);
         }
 
         return originalFetch.apply(this, arguments);
@@ -104,7 +123,7 @@ canvas {
     XMLHttpRequest.prototype.send = function(body) {
         if (this.__gdEndpoint) {
             const xhr = this;
-            fetchWithFallback(this.__gdEndpoint, { method: 'POST', body: body })
+            fetchWithWorker(this.__gdEndpoint, { method: 'POST', body: body })
                 .then(async (res) => {
                     const text = await res.text();
                     Object.defineProperty(xhr, 'responseText', { value: text, configurable: true });
