@@ -72,8 +72,13 @@ canvas {
 
         if (endpoint) {
             const targetUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
+            
+            // Override method to GET so GitHub accepts static file requests
+            const modifiedInit = Object.assign({}, init || {}, { method: 'GET' });
+            if (modifiedInit.body) delete modifiedInit.body;
+
             try {
-                const res = await originalFetch(targetUrl, init);
+                const res = await originalFetch(targetUrl, modifiedInit);
                 if (!res.ok) {
                     return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
                 }
@@ -91,8 +96,18 @@ canvas {
         const endpoint = extractPhpEndpoint(url);
         if (endpoint) {
             url = `${GITHUB_BASE_URL}/${endpoint}.txt`;
+            method = 'GET';
+            this.__isGdEndpoint = true;
         }
         return originalOpen.call(this, method, url, async, user, password);
+    };
+
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function(body) {
+        if (this.__isGdEndpoint) {
+            return originalSend.call(this, null);
+        }
+        return originalSend.call(this, body);
     };
 })();
 </script>
