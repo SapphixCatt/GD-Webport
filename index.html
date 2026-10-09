@@ -27,14 +27,11 @@ canvas {
   max-height: 100%;
   object-fit: contain;
   background: #000;
-  image-rendering: optimizeSpeed;
-  image-rendering: -webkit-optimize-contrast;
+  image-rendering: pixelated;
   outline: none;
   display: block;
   user-select: none;
   touch-action: none;
-  transform: translateZ(0); /* Hardware Acceleration Layer */
-  will-change: transform;
 }
 #loading-overlay {
   position: absolute;
@@ -53,7 +50,7 @@ canvas {
 
 <body>
 <div id="loading-overlay">Fetching LFS Assets...</div>
-<canvas id="canvas" width="1280" height="720" tabindex="0"></canvas>
+<canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
 <!-- GitHub Route Interceptor -->
 <script>
@@ -75,10 +72,14 @@ canvas {
 
         if (endpoint) {
             const targetUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
-            if (typeof resource === 'string') {
-                resource = targetUrl;
-            } else if (resource && resource.url) {
-                resource = new Request(targetUrl, resource);
+            try {
+                const res = await originalFetch(targetUrl, init);
+                if (!res.ok) {
+                    return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
+                }
+                return res;
+            } catch (e) {
+                return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
             }
         }
 
@@ -100,8 +101,11 @@ canvas {
 var isSyncing = false;
 
 function syncFilesToDB(filePath, data) {
-  // Non-blocking background save to prevent main thread frame drops
-  requestIdleCallback ? requestIdleCallback(function() { doSave(filePath, data); }) : setTimeout(function() { doSave(filePath, data); }, 0);
+  if (window.requestIdleCallback) {
+    requestIdleCallback(function() { doSave(filePath, data); });
+  } else {
+    setTimeout(function() { doSave(filePath, data); }, 0);
+  }
 }
 
 function doSave(filePath, data) {
@@ -148,7 +152,6 @@ function saveFS() {
   }
 }
 
-// Throttle saves to every 5 seconds to eliminate frame hitching
 setInterval(saveFS, 5000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
@@ -227,10 +230,10 @@ var Module = {
     alpha: false,
     depth: true,
     stencil: true,
-    antialias: false, // Performance Boost: Disable MSAA on web browsers
+    antialias: false,
     premultipliedAlpha: false,
     preserveDrawingBuffer: false,
-    powerPreference: "high-performance" // Force GPU High Performance mode
+    powerPreference: "high-performance"
   },
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data' || path.endsWith('.data')) {
@@ -317,7 +320,7 @@ window.addEventListener('DOMContentLoaded', gdStart);
 
   function pos(e) {
     const r = el.getBoundingClientRect();
-    const targetAspect = 1280 / 720;
+    const targetAspect = 1920 / 1080;
     const containerAspect = r.width / r.height;
     let renderWidth, renderHeight, offsetX, offsetY;
 
@@ -336,8 +339,8 @@ window.addEventListener('DOMContentLoaded', gdStart);
     const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
     const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
 
-    const x = Math.max(0, Math.min(1279, Math.round((clientX - offsetX) * 1280 / renderWidth)));
-    const y = Math.max(0, Math.min(719, Math.round((clientY - offsetY) * 720 / renderHeight)));
+    const x = Math.max(0, Math.min(1919, Math.round((clientX - offsetX) * 1920 / renderWidth)));
+    const y = Math.max(0, Math.min(1079, Math.round((clientY - offsetY) * 1080 / renderHeight)));
 
     Module.gdCursorPos[0] = x;
     Module.gdCursorPos[1] = y;
@@ -345,7 +348,6 @@ window.addEventListener('DOMContentLoaded', gdStart);
   }
 
   function push(m, w, l) {
-    // Limit input queue size to prevent memory bloat and input lag spike
     if (Module.gdInputQueue.length > 30) Module.gdInputQueue.shift();
     Module.gdInputQueue.push([m | 0, w | 0, l | 0]);
   }
