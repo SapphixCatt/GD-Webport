@@ -55,6 +55,7 @@ canvas {
 <!-- API Route Interceptor -->
 <script>
 (function() {
+    const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
     const GITHUB_BASE_URL = "https://raw.githubusercontent.com/SapphixCatt/GD-Webport/main/api-cache";
 
     function extractPhpEndpoint(inputUrl) {
@@ -66,26 +67,22 @@ canvas {
     }
 
     async function fetchWithProxy(endpoint, init) {
-        const targetUrl = `https://www.boomlings.com/database/${endpoint}`;
+        const proxyTarget = `${WORKER_URL}/${endpoint}`;
         
-        // Attempt via CORS Proxy Bridge
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
 
             const modifiedInit = Object.assign({}, init || {}, {
                 signal: controller.signal
             });
 
-            const res = await originalFetch(proxyUrl, modifiedInit);
+            const res = await originalFetch(proxyTarget, modifiedInit);
             clearTimeout(timeoutId);
 
             if (res.ok) {
                 const textData = await res.clone().text();
-                // Ensure response is actual GD data and not Cloudflare HTML challenge
-                if (textData && textData !== "-1" && !textData.includes("<!DOCTYPE html>") && !textData.includes("Just a moment...")) {
+                if (textData && textData !== "-1" && !textData.includes("<!DOCTYPE html>")) {
                     return res;
                 }
             }
@@ -93,7 +90,7 @@ canvas {
             console.warn("Proxy fetch failed, falling back to static cache...");
         }
 
-        // Fallback to repository static cache if live fetch fails or hits WAF
+        // Fallback to static cache if worker fails or is unreachable
         const githubCacheUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
         try {
             const cacheRes = await originalFetch(githubCacheUrl, { method: 'GET' });
