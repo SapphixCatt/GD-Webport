@@ -67,8 +67,16 @@ canvas {
             return `?songUrl=${encodeURIComponent(str)}`;
         }
 
-        // Catch account operations and preserve the /accounts/ folder prefix
-        if (str.includes('/accounts/') || str.includes('login') || str.includes('register') || str.includes('getGJAcc')) {
+        // Catch account operations, sync/save progress endpoints, and profile management
+        if (
+            str.includes('/accounts/') || 
+            str.includes('login') || 
+            str.includes('register') || 
+            str.includes('getGJAcc') || 
+            str.includes('syncGJAccount') || 
+            str.includes('saveGJAccount') || 
+            str.includes('backup')
+        ) {
             const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
             return match ? `accounts/${match[1]}` : null;
         }
@@ -176,8 +184,28 @@ function doSave(filePath, data) {
   } catch (e) {}
 }
 
+function isPlayerInLevel() {
+  if (typeof Module === 'undefined') return false;
+  try {
+    // Check internal PlayLayer status if available via exports or flags
+    if (Module._gd_is_in_play_layer && Module._gd_is_in_play_layer()) {
+      return true;
+    }
+    if (Module.gdIsInPlayLayer === true) {
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
 function saveFS() {
   if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing) return;
+  
+  // Skip autosaving if actively playing a level to prevent micro-stutters
+  if (isPlayerInLevel()) {
+    return;
+  }
+
   isSyncing = true;
   try {
     if (Module._gd_request_save) Module._gd_request_save();
@@ -204,7 +232,7 @@ function saveFS() {
   }
 }
 
-// Autosave every 30 seconds (30000ms) to eliminate frame-stutter lag spikes
+// Autosave every 30 seconds only when in menus or paused
 setInterval(saveFS, 30000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
