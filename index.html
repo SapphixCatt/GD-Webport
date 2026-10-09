@@ -52,10 +52,9 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Cloudflare Worker Route Interceptor -->
+<!-- API Route Interceptor -->
 <script>
 (function() {
-    const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
     const GITHUB_BASE_URL = "https://raw.githubusercontent.com/SapphixCatt/GD-Webport/main/api-cache";
 
     function extractPhpEndpoint(inputUrl) {
@@ -66,9 +65,12 @@ canvas {
         return match ? match[1] : null;
     }
 
-    async function fetchWithWorker(endpoint, init) {
-        const proxyTarget = `${WORKER_URL}/${endpoint}`;
+    async function fetchWithProxy(endpoint, init) {
+        const targetUrl = `https://www.boomlings.com/database/${endpoint}`;
         
+        // Attempt via CORS Proxy Bridge
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 6000);
@@ -77,20 +79,21 @@ canvas {
                 signal: controller.signal
             });
 
-            const res = await originalFetch(proxyTarget, modifiedInit);
+            const res = await originalFetch(proxyUrl, modifiedInit);
             clearTimeout(timeoutId);
 
             if (res.ok) {
                 const textData = await res.clone().text();
-                if (textData && textData !== "-1") {
+                // Ensure response is actual GD data and not Cloudflare HTML challenge
+                if (textData && textData !== "-1" && !textData.includes("<!DOCTYPE html>") && !textData.includes("Just a moment...")) {
                     return res;
                 }
             }
         } catch (e) {
-            console.warn("Cloudflare Worker fetch failed, trying repository cache fallback...");
+            console.warn("Proxy fetch failed, falling back to static cache...");
         }
 
-        // Fallback to repository cache if Worker drops connection
+        // Fallback to repository static cache if live fetch fails or hits WAF
         const githubCacheUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
         try {
             const cacheRes = await originalFetch(githubCacheUrl, { method: 'GET' });
@@ -106,7 +109,7 @@ canvas {
         const endpoint = extractPhpEndpoint(urlStr);
 
         if (endpoint) {
-            return fetchWithWorker(endpoint, init);
+            return fetchWithProxy(endpoint, init);
         }
 
         return originalFetch.apply(this, arguments);
@@ -126,7 +129,7 @@ canvas {
     XMLHttpRequest.prototype.send = function(body) {
         if (this.__gdEndpoint) {
             const xhr = this;
-            fetchWithWorker(this.__gdEndpoint, { 
+            fetchWithProxy(this.__gdEndpoint, { 
                 method: this.__gdMethod || 'POST', 
                 body: body,
                 headers: {
