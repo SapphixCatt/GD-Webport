@@ -67,12 +67,11 @@ canvas {
     }
 
     async function fetchWithWorker(endpoint, init) {
-        // Route directly through your deployed Cloudflare Worker
         const proxyTarget = `${WORKER_URL}/${endpoint}`;
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
 
             const modifiedInit = Object.assign({}, init || {}, {
                 signal: controller.signal
@@ -82,13 +81,16 @@ canvas {
             clearTimeout(timeoutId);
 
             if (res.ok) {
-                return res;
+                const textData = await res.clone().text();
+                if (textData && textData !== "-1") {
+                    return res;
+                }
             }
         } catch (e) {
             console.warn("Cloudflare Worker fetch failed, trying repository cache fallback...");
         }
 
-        // Fallback to repository cache if Worker network drops
+        // Fallback to repository cache if Worker returns -1 or drops connection
         const githubCacheUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
         try {
             const cacheRes = await originalFetch(githubCacheUrl, { method: 'GET' });
