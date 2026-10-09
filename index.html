@@ -52,9 +52,10 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- GitHub Route Interceptor -->
+<!-- CORS-Anywhere Route Interceptor -->
 <script>
 (function() {
+    const CORS_PROXY = "https://cors-anywhere.herokuapp.com/";
     const GITHUB_BASE_URL = "https://raw.githubusercontent.com/SapphixCatt/GD-Webport/main/api-cache";
 
     function extractPhpEndpoint(inputUrl) {
@@ -65,27 +66,50 @@ canvas {
         return match ? match[1] : null;
     }
 
+    async function fetchWithProxy(targetUrl, init) {
+        const proxyUrl = CORS_PROXY + targetUrl;
+        
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+            const modifiedInit = Object.assign({}, init || {}, {
+                signal: controller.signal,
+                headers: Object.assign({}, (init && init.headers) || {}, {
+                    'X-Requested-With': 'XMLHttpRequest'
+                })
+            });
+
+            const res = await originalFetch(proxyUrl, modifiedInit);
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+                return res;
+            }
+        } catch (e) {
+            console.warn("CORS-Anywhere request failed or timed out, trying GitHub cache fallback...");
+        }
+
+        // Fallback to static cache in GitHub repo
+        const endpoint = extractPhpEndpoint(targetUrl);
+        const githubCacheUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
+        
+        try {
+            const cacheRes = await originalFetch(githubCacheUrl, { method: 'GET' });
+            if (cacheRes.ok) return cacheRes;
+        } catch(e) {}
+
+        return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
+    }
+
     const originalFetch = window.fetch;
     window.fetch = async function(resource, init) {
         let urlStr = typeof resource === 'string' ? resource : (resource ? resource.url : '');
         const endpoint = extractPhpEndpoint(urlStr);
 
         if (endpoint) {
-            const targetUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
-            
-            // Override method to GET so GitHub accepts static file requests
-            const modifiedInit = Object.assign({}, init || {}, { method: 'GET' });
-            if (modifiedInit.body) delete modifiedInit.body;
-
-            try {
-                const res = await originalFetch(targetUrl, modifiedInit);
-                if (!res.ok) {
-                    return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
-                }
-                return res;
-            } catch (e) {
-                return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
-            }
+            const targetUrl = `https://www.boomlings.com/database/${endpoint}`;
+            return fetchWithProxy(targetUrl, init);
         }
 
         return originalFetch.apply(this, arguments);
@@ -95,17 +119,26 @@ canvas {
     XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
         const endpoint = extractPhpEndpoint(url);
         if (endpoint) {
-            url = `${GITHUB_BASE_URL}/${endpoint}.txt`;
-            method = 'GET';
-            this.__isGdEndpoint = true;
+            this.__gdTargetUrl = `https://www.boomlings.com/database/${endpoint}`;
         }
         return originalOpen.call(this, method, url, async, user, password);
     };
 
     const originalSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function(body) {
-        if (this.__isGdEndpoint) {
-            return originalSend.call(this, null);
+        if (this.__gdTargetUrl) {
+            const xhr = this;
+            fetchWithProxy(this.__gdTargetUrl, { method: 'POST', body: body })
+                .then(async (res) => {
+                    const text = await res.text();
+                    Object.defineProperty(xhr, 'responseText', { value: text, configurable: true });
+                    Object.defineProperty(xhr, 'response', { value: text, configurable: true });
+                    Object.defineProperty(xhr, 'status', { value: 200, configurable: true });
+                    Object.defineProperty(xhr, 'readyState', { value: 4, configurable: true });
+                    if (xhr.onreadystatechange) xhr.onreadystatechange();
+                    if (xhr.onload) xhr.onload();
+                });
+            return;
         }
         return originalSend.call(this, body);
     };
@@ -167,7 +200,7 @@ function saveFS() {
   }
 }
 
-setInterval(saveFS, 5000);
+setInterval(saveFS, 2000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
 
