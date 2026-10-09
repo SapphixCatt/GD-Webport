@@ -52,10 +52,10 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Direct Cloudflare Worker Interceptor -->
+<!-- Direct Fly.io Proxy Network Interceptor -->
 <script>
 (function() {
-    const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
+    const WORKER_URL = "https://gd-proxy.fly.dev";
 
     function extractPhpEndpoint(inputUrl) {
         if (!inputUrl) return null;
@@ -66,7 +66,6 @@ canvas {
     }
 
     async function fetchWithWorker(endpoint, init) {
-        // Direct route targeting boomlings.com/database via your worker proxy
         const proxyTarget = `${WORKER_URL}/${endpoint}`;
         
         try {
@@ -84,7 +83,7 @@ canvas {
                 return res;
             }
         } catch (e) {
-            console.warn("Direct Worker proxy fetch failed.");
+            console.warn("Fly.io proxy fetch failed.");
         }
 
         return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
