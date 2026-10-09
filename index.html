@@ -68,8 +68,8 @@ canvas {
         }
 
         // Handle accounts vs database PHP endpoints
-        if (str.includes('/accounts/')) {
-            const match = str.match(/\/accounts\/([a-zA-Z0-9_-]+\.php)/i);
+        if (str.includes('/accounts/') || str.includes('login') || str.includes('register') || str.includes('getGJAcc')) {
+            const match = str.match(/(?:accounts\/)?([a-zA-Z0-9_-]+\.php)/i);
             return match ? `accounts/${match[1]}` : null;
         }
 
@@ -204,7 +204,8 @@ function saveFS() {
   }
 }
 
-setInterval(saveFS, 2000);
+// Autosave every 30 seconds (30000ms) to eliminate frame-stutter lag spikes
+setInterval(saveFS, 30000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
 
