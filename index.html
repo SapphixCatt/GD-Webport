@@ -67,9 +67,9 @@ canvas {
             return `?songUrl=${encodeURIComponent(str)}`;
         }
 
-        // Handle accounts vs database PHP endpoints
+        // Catch account operations and preserve the /accounts/ folder prefix
         if (str.includes('/accounts/') || str.includes('login') || str.includes('register') || str.includes('getGJAcc')) {
-            const match = str.match(/(?:accounts\/)?([a-zA-Z0-9_-]+\.php)/i);
+            const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
             return match ? `accounts/${match[1]}` : null;
         }
 
