@@ -71,7 +71,7 @@ canvas {
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
 
             const modifiedInit = Object.assign({}, init || {}, {
                 signal: controller.signal
@@ -90,7 +90,7 @@ canvas {
             console.warn("Cloudflare Worker fetch failed, trying repository cache fallback...");
         }
 
-        // Fallback to repository cache if Worker returns -1 or drops connection
+        // Fallback to repository cache if Worker drops connection
         const githubCacheUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
         try {
             const cacheRes = await originalFetch(githubCacheUrl, { method: 'GET' });
@@ -117,6 +117,7 @@ canvas {
         const endpoint = extractPhpEndpoint(url);
         if (endpoint) {
             this.__gdEndpoint = endpoint;
+            this.__gdMethod = method;
         }
         return originalOpen.call(this, method, url, async, user, password);
     };
@@ -125,16 +126,21 @@ canvas {
     XMLHttpRequest.prototype.send = function(body) {
         if (this.__gdEndpoint) {
             const xhr = this;
-            fetchWithWorker(this.__gdEndpoint, { method: 'POST', body: body })
-                .then(async (res) => {
-                    const text = await res.text();
-                    Object.defineProperty(xhr, 'responseText', { value: text, configurable: true });
-                    Object.defineProperty(xhr, 'response', { value: text, configurable: true });
-                    Object.defineProperty(xhr, 'status', { value: 200, configurable: true });
-                    Object.defineProperty(xhr, 'readyState', { value: 4, configurable: true });
-                    if (xhr.onreadystatechange) xhr.onreadystatechange();
-                    if (xhr.onload) xhr.onload();
-                });
+            fetchWithWorker(this.__gdEndpoint, { 
+                method: this.__gdMethod || 'POST', 
+                body: body,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            }).then(async (res) => {
+                const text = await res.text();
+                Object.defineProperty(xhr, 'responseText', { value: text, configurable: true });
+                Object.defineProperty(xhr, 'response', { value: text, configurable: true });
+                Object.defineProperty(xhr, 'status', { value: 200, configurable: true });
+                Object.defineProperty(xhr, 'readyState', { value: 4, configurable: true });
+                if (xhr.onreadystatechange) xhr.onreadystatechange();
+                if (xhr.onload) xhr.onload();
+            });
             return;
         }
         return originalSend.call(this, body);
