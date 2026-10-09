@@ -140,7 +140,6 @@ function saveFS() {
   }
 }
 
-// Frequent autosave interval (every 2 seconds) + instant triggers on change
 setInterval(saveFS, 2000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
@@ -241,7 +240,6 @@ var Module = {
 
     if (Module._gd_autosave_set) Module._gd_autosave_set(1);
     
-    // Safely hook file write without recursion crashes
     if (Module.FS && Module.FS.writeFile && !Module.FS.__hooked) {
       var origWrite = Module.FS.writeFile;
       Module.FS.writeFile = function (path, data, opts) {
@@ -305,6 +303,7 @@ window.addEventListener('DOMContentLoaded', gdStart);
     const targetAspect = 1920 / 1080;
     const containerAspect = r.width / r.height;
     let renderWidth, renderHeight, offsetX, offsetY;
+
     if (containerAspect > targetAspect) {
       renderHeight = r.height;
       renderWidth = r.height * targetAspect;
@@ -316,10 +315,13 @@ window.addEventListener('DOMContentLoaded', gdStart);
       offsetX = r.left;
       offsetY = r.top + (r.height - renderHeight) / 2;
     }
+
     const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+
     const x = Math.max(0, Math.min(1919, Math.round((clientX - offsetX) * 1920 / renderWidth)));
     const y = Math.max(0, Math.min(1079, Math.round((clientY - offsetY) * 1080 / renderHeight)));
+
     Module.gdCursorPos[0] = x;
     Module.gdCursorPos[1] = y;
     return (x & 0xffff) | ((y & 0xffff) << 16);
