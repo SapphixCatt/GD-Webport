@@ -55,7 +55,6 @@ canvas {
 <!-- GitHub Route Interceptor -->
 <script>
 (function() {
-    // Points directly to raw GitHub content under your user/repo name
     const GITHUB_BASE_URL = "https://raw.githubusercontent.com/SapphixCatt/GD-Webport/main/api-cache";
 
     function extractPhpEndpoint(inputUrl) {
@@ -72,7 +71,6 @@ canvas {
         const endpoint = extractPhpEndpoint(urlStr);
 
         if (endpoint) {
-            // Map request to the GitHub raw storage path for cached responses
             const targetUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
             if (typeof resource === 'string') {
                 resource = targetUrl;
@@ -96,6 +94,8 @@ canvas {
 </script>
 
 <script>
+var isSyncing = false;
+
 function syncFilesToDB(filePath, data) {
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
@@ -105,15 +105,16 @@ function syncFilesToDB(filePath, data) {
         var db = req.result;
         var tx = db.transaction('files', 'readwrite');
         var store = tx.objectStore('files');
-        var buf = (data.buffer && data.byteLength !== undefined) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data;
-        store.put(buf, filePath);
+        var buf = (data && data.buffer && data.byteLength !== undefined) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data;
+        if (buf) store.put(buf, filePath);
       } catch (e) {}
     };
   } catch (e) {}
 }
 
 function saveFS() {
-  if (!window.__gdRuntimeReady || typeof Module === 'undefined') return;
+  if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing) return;
+  isSyncing = true;
   try {
     if (Module._gd_request_save) Module._gd_request_save();
     if (Module.FS) {
@@ -124,12 +125,23 @@ function saveFS() {
           if (data && data.length) syncFilesToDB(file, data);
         } catch(e) {}
       });
-      if (Module.FS.syncfs) Module.FS.syncfs(false, function (err) {});
+      if (Module.FS.syncfs) {
+        Module.FS.syncfs(false, function (err) {
+          isSyncing = false;
+        });
+      } else {
+        isSyncing = false;
+      }
+    } else {
+      isSyncing = false;
     }
-  } catch (e) {}
+  } catch (e) {
+    isSyncing = false;
+  }
 }
 
-setInterval(saveFS, 5000);
+// Frequent autosave interval (every 2 seconds) + instant triggers on change
+setInterval(saveFS, 2000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
 
@@ -228,7 +240,9 @@ var Module = {
     if (overlay) overlay.style.display = 'none';
 
     if (Module._gd_autosave_set) Module._gd_autosave_set(1);
-    if (Module.FS) {
+    
+    // Safely hook file write without recursion crashes
+    if (Module.FS && Module.FS.writeFile && !Module.FS.__hooked) {
       var origWrite = Module.FS.writeFile;
       Module.FS.writeFile = function (path, data, opts) {
         var res = origWrite.apply(this, arguments);
@@ -238,7 +252,9 @@ var Module = {
         }
         return res;
       };
+      Module.FS.__hooked = true;
     }
+
     try { Module.FS.chdir('/Resources'); } catch (e) {}
     setTimeout(function () {
       restoreSaves(function () {
@@ -287,101 +303,4 @@ window.addEventListener('DOMContentLoaded', gdStart);
   function pos(e) {
     const r = el.getBoundingClientRect();
     const targetAspect = 1920 / 1080;
-    const containerAspect = r.width / r.height;
-    let renderWidth, renderHeight, offsetX, offsetY;
-    if (containerAspect > targetAspect) {
-      renderHeight = r.height;
-      renderWidth = r.height * targetAspect;
-      offsetX = r.left + (r.width - renderWidth) / 2;
-      offsetY = r.top;
-    } else {
-      renderWidth = r.width;
-      renderHeight = r.width / targetAspect;
-      offsetX = r.left;
-      offsetY = r.top + (r.height - renderHeight) / 2;
-    }
-    const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-    const x = Math.max(0, Math.min(1919, Math.round((clientX - offsetX) * 1920 / renderWidth)));
-    const y = Math.max(0, Math.min(1079, Math.round((clientY - offsetY) * 1080 / renderHeight)));
-    Module.gdCursorPos[0] = x;
-    Module.gdCursorPos[1] = y;
-    return (x & 0xffff) | ((y & 0xffff) << 16);
-  }
-
-  function push(m, w, l) { Module.gdInputQueue.push([m | 0, w | 0, l | 0]); }
-
-  window.addEventListener('click', function() {
-    if (el) el.focus();
-  });
-
-  window.addEventListener('mousedown', function (e) {
-    if (!ready() || e.target !== el) return;
-    el.focus();
-    var m = e.button === 2 ? WM_RBUTTONDOWN : (e.button === 1 ? WM_MBUTTONDOWN : WM_LBUTTONDOWN);
-    var w = e.button === 2 ? 2 : (e.button === 1 ? 16 : 1);
-    push(m, w, pos(e));
-    e.preventDefault();
-  });
-
-  window.addEventListener('mouseup', function (e) {
-    if (!ready()) return;
-    var m = e.button === 2 ? WM_RBUTTONUP : (e.button === 1 ? WM_MBUTTONUP : WM_LBUTTONUP);
-    push(m, 0, pos(e));
-    push(WM_MOUSEMOVE, 0, pos(e));
-    if (e.target === el) e.preventDefault();
-  });
-
-  window.addEventListener('mousemove', function (e) {
-    if (!ready()) return;
-    var q = Module.gdInputQueue;
-    var w = (e.buttons & 1) ? 1 : 0, l = pos(e);
-    if (q.length && q[q.length - 1][0] === WM_MOUSEMOVE) q[q.length - 1] = [WM_MOUSEMOVE, w, l];
-    else q.push([WM_MOUSEMOVE, w, l]);
-  });
-
-  var VK = { 'Escape':0x1B,'Space':0x20,'Enter':0x0D,'Backspace':0x08,'Tab':0x09,
-  'ArrowLeft':0x25,'ArrowUp':0x26,'ArrowRight':0x27,'ArrowDown':0x28,
-  'KeyW':0x57,'KeyA':0x41,'KeyS':0x53,'KeyD':0x44,
-  'KeyQ':0x51,'KeyE':0x12,'KeyR':0x13,'KeyF':0x21,'KeyP':0x19 };
-  var SCAN = { 'Escape':0x01,'Space':0x39,'Enter':0x1C,'Backspace':0x0E,'Tab':0x0F,
-  'ArrowLeft':0x4B,'ArrowUp':0x48,'ArrowRight':0x4D,'ArrowDown':0x50,
-  'KeyW':0x11,'KeyA':0x1E,'KeyS':0x1F,'KeyD':0x20,
-  'KeyQ':0x10,'KeyE':0x12,'KeyR':0x13,'KeyF':0x21,'KeyP':0x19 };
-  var EXT = { 'ArrowLeft':1,'ArrowUp':1,'ArrowRight':1,'ArrowDown':1 };
-  Module.gdKeyState = new Uint8Array(256);
-
-  function keyEvent(e, down) {
-    if (!ready()) return;
-    var vk = VK[e.code] || e.keyCode || 0;
-    if (down) {
-      var ch = 0;
-      if (e.key && e.key.length === 1) ch = e.key.charCodeAt(0);
-      else if (e.code === 'Backspace') ch = 0x08;
-      else if (e.code === 'Enter') ch = 0x0D;
-      if (ch) {
-        var clp = 1 | ((SCAN[e.code] || 0) << 16);
-        if (EXT[e.code]) clp |= 0x1000000;
-        push(0x0102, ch, clp);
-      }
-    }
-    if (!vk) return;
-    Module.gdKeyState[vk & 0xff] = down ? 1 : 0;
-    var scan = SCAN[e.code] || 0;
-    var lp = 1 | (scan << 16);
-    if (EXT[e.code]) lp |= 0x1000000;
-    if (!down) lp |= -1073741824;
-    push(down ? 0x100 : 0x101, vk, lp);
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) {
-      e.preventDefault();
-    }
-  }
-
-  window.addEventListener('keydown', function (e) { keyEvent(e, true); });
-  window.addEventListener('keyup', function (e) { keyEvent(e, false); });
-
-  el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-})();
-</script>
-</body>
-</html>
+    const containerAspect = r
