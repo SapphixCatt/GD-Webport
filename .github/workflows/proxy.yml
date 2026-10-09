@@ -1,0 +1,30 @@
+name: GD Online Proxy Bridge
+
+on:
+  repository_dispatch:
+    types: [gd_proxy_request]
+
+jobs:
+  proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch from Boomlings
+        run: |
+          ENDPOINT="${{ github.event.client_payload.endpoint }}"
+          BODY="${{ github.event.client_payload.body }}"
+          
+          echo "Fetching $ENDPOINT..."
+          
+          RESPONSE=$(curl -s -X POST "https://www.boomlings.com/database/$ENDPOINT" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "User-Agent: " \
+            --data "$BODY")
+            
+          echo "$RESPONSE" > response.txt
+
+      - name: Deploy Response to GitHub Pages Path
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          destination_dir: api-cache
