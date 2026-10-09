@@ -52,11 +52,10 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- API Route Interceptor -->
+<!-- Direct Cloudflare Worker Interceptor -->
 <script>
 (function() {
     const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
-    const GITHUB_BASE_URL = "https://raw.githubusercontent.com/SapphixCatt/GD-Webport/main/api-cache";
 
     function extractPhpEndpoint(inputUrl) {
         if (!inputUrl) return null;
@@ -66,7 +65,8 @@ canvas {
         return match ? match[1] : null;
     }
 
-    async function fetchWithProxy(endpoint, init) {
+    async function fetchWithWorker(endpoint, init) {
+        // Direct route targeting boomlings.com/database via your worker proxy
         const proxyTarget = `${WORKER_URL}/${endpoint}`;
         
         try {
@@ -81,21 +81,11 @@ canvas {
             clearTimeout(timeoutId);
 
             if (res.ok) {
-                const textData = await res.clone().text();
-                if (textData && textData !== "-1" && !textData.includes("<!DOCTYPE html>")) {
-                    return res;
-                }
+                return res;
             }
         } catch (e) {
-            console.warn("Proxy fetch failed, falling back to static cache...");
+            console.warn("Direct Worker proxy fetch failed.");
         }
-
-        // Fallback to static cache if worker fails or is unreachable
-        const githubCacheUrl = `${GITHUB_BASE_URL}/${endpoint}.txt`;
-        try {
-            const cacheRes = await originalFetch(githubCacheUrl, { method: 'GET' });
-            if (cacheRes.ok) return cacheRes;
-        } catch(e) {}
 
         return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
     }
@@ -106,7 +96,7 @@ canvas {
         const endpoint = extractPhpEndpoint(urlStr);
 
         if (endpoint) {
-            return fetchWithProxy(endpoint, init);
+            return fetchWithWorker(endpoint, init);
         }
 
         return originalFetch.apply(this, arguments);
@@ -126,7 +116,7 @@ canvas {
     XMLHttpRequest.prototype.send = function(body) {
         if (this.__gdEndpoint) {
             const xhr = this;
-            fetchWithProxy(this.__gdEndpoint, { 
+            fetchWithWorker(this.__gdEndpoint, { 
                 method: this.__gdMethod || 'POST', 
                 body: body,
                 headers: {
