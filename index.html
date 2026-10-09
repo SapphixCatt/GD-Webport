@@ -62,17 +62,19 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // Handle direct Newgrounds MP3 audio streams
-        if (str.includes('newgrounds.com') || str.includes('ungrounded.net') || str.endsWith('.mp3')) {
+        // Handle direct Newgrounds MP3 audio streams and CDN links
+        if (str.includes('newgrounds.com') || str.includes('ungrounded.net') || str.includes('audio.ngfiles.com') || str.endsWith('.mp3')) {
             return `?songUrl=${encodeURIComponent(str)}`;
         }
 
-        // Catch account operations, sync/save progress endpoints, and profile management
+        // Account operations, progress syncing, comments, and profile fetching
         if (
             str.includes('/accounts/') || 
             str.includes('login') || 
             str.includes('register') || 
             str.includes('getGJAcc') || 
+            str.includes('getGJUserInfo') || 
+            str.includes('getGJAccountComments') || 
             str.includes('syncGJAccount') || 
             str.includes('saveGJAccount') || 
             str.includes('backup')
@@ -90,7 +92,7 @@ canvas {
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
 
             const modifiedInit = Object.assign({}, init || {}, {
                 signal: controller.signal
@@ -187,7 +189,6 @@ function doSave(filePath, data) {
 function isPlayerInLevel() {
   if (typeof Module === 'undefined') return false;
   try {
-    // Check internal PlayLayer status if available via exports or flags
     if (Module._gd_is_in_play_layer && Module._gd_is_in_play_layer()) {
       return true;
     }
@@ -201,7 +202,6 @@ function isPlayerInLevel() {
 function saveFS() {
   if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing) return;
   
-  // Skip autosaving if actively playing a level to prevent micro-stutters
   if (isPlayerInLevel()) {
     return;
   }
@@ -232,7 +232,6 @@ function saveFS() {
   }
 }
 
-// Autosave every 30 seconds only when in menus or paused
 setInterval(saveFS, 30000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
