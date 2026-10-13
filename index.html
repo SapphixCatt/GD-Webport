@@ -62,7 +62,7 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // STRICT audio stream interception (Only trigger if it's an actual music file or media stream domain)
+        // Audio stream redirection
         if (
             str.includes('audio.ngfiles.com') || 
             str.includes('b-cdn.net/music/') || 
@@ -80,7 +80,22 @@ canvas {
             return `?songUrl=${encodeURIComponent(target)}`;
         }
 
-        // Standard PHP Game Endpoints (Level searching, user info, account sync, comments)
+        // Account management, sync, save, user info, and profile comments routing
+        if (
+            str.includes('login') || 
+            str.includes('register') || 
+            str.includes('syncGJAccount') || 
+            str.includes('saveGJAccount') || 
+            str.includes('backup') || 
+            str.includes('restore') || 
+            str.includes('getGJAccountComments') || 
+            str.includes('getGJUserInfo') || 
+            str.includes('uploadGJAccComment')
+        ) {
+            const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
+            return match ? `accounts/${match[1]}` : null;
+        }
+
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
