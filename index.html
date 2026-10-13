@@ -230,7 +230,7 @@ function saveFS() {
   }
 }
 
-// Autosave every 10 minutes when idle/in menus
+// Background autosave set strictly to every 10 minutes (600,000 ms)
 setInterval(saveFS, 600000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
