@@ -80,22 +80,7 @@ canvas {
             return `?songUrl=${encodeURIComponent(target)}`;
         }
 
-        // Account management, sync, save, user info, and profile comments routing
-        if (
-            str.includes('login') || 
-            str.includes('register') || 
-            str.includes('syncGJAccount') || 
-            str.includes('saveGJAccount') || 
-            str.includes('backup') || 
-            str.includes('restore') || 
-            str.includes('getGJAccountComments') || 
-            str.includes('getGJUserInfo') || 
-            str.includes('uploadGJAccComment')
-        ) {
-            const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
-            return match ? `accounts/${match[1]}` : null;
-        }
-
+        // Clean PHP endpoint extraction
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
