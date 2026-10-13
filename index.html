@@ -62,27 +62,25 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // Comprehensive audio stream & CDN redirection handler (handles Newgrounds, b-cdn.net, __proxy wrappers, .ogg, .mp3)
+        // STRICT audio stream interception (Only trigger if it's an actual music file or media stream domain)
         if (
-            str.includes('newgrounds.com') || 
-            str.includes('ungrounded.net') || 
             str.includes('audio.ngfiles.com') || 
-            str.includes('b-cdn.net') || 
-            str.includes('__proxy') || 
-            str.includes('?url=') || 
-            str.includes('&url=') || 
+            str.includes('b-cdn.net/music/') || 
             str.endsWith('.mp3') || 
-            str.endsWith('.ogg')
+            str.endsWith('.ogg') ||
+            (str.includes('?url=') && (str.includes('.mp3') || str.includes('.ogg') || str.includes('music'))) ||
+            (str.includes('&url=') && (str.includes('.mp3') || str.includes('.ogg') || str.includes('music')))
         ) {
             let target = str;
             if (str.includes('?url=')) {
-                target = decodeURIComponent(str.split('?url=')[1]);
+                target = decodeURIComponent(str.split('?url=')[1].split('&')[0]);
             } else if (str.includes('&url=')) {
-                target = decodeURIComponent(str.split('&url=')[1]);
+                target = decodeURIComponent(str.split('&url=')[1].split('&')[0]);
             }
             return `?songUrl=${encodeURIComponent(target)}`;
         }
 
+        // Standard PHP Game Endpoints (Level searching, user info, account sync, comments)
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
