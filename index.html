@@ -67,22 +67,6 @@ canvas {
             return `?songUrl=${encodeURIComponent(str)}`;
         }
 
-        // Account management, stats, comments, and profile fetching
-        if (
-            str.includes('/accounts/') || 
-            str.includes('login') || 
-            str.includes('register') || 
-            str.includes('getGJAcc') || 
-            str.includes('getGJUserInfo') || 
-            str.includes('getGJAccountComments') || 
-            str.includes('syncGJAccount') || 
-            str.includes('saveGJAccount') || 
-            str.includes('backup')
-        ) {
-            const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
-            return match ? `accounts/${match[1]}` : null;
-        }
-
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
@@ -232,7 +216,7 @@ function saveFS() {
   }
 }
 
-// Autosave every 10 minutes (600000ms) when in menus/idle, avoiding gameplay stutters
+// Autosave every 10 minutes when idle/in menus
 setInterval(saveFS, 600000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
