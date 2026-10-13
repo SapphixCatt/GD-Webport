@@ -62,12 +62,12 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // Handle direct Newgrounds MP3 audio streams and CDN links
+        // Audio stream redirection
         if (str.includes('newgrounds.com') || str.includes('ungrounded.net') || str.includes('audio.ngfiles.com') || str.endsWith('.mp3')) {
             return `?songUrl=${encodeURIComponent(str)}`;
         }
 
-        // Account operations, progress syncing, comments, and profile fetching
+        // Account management, stats, comments, and profile fetching
         if (
             str.includes('/accounts/') || 
             str.includes('login') || 
