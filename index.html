@@ -42,13 +42,13 @@
 
    function formatProxyUrl(rawUrl) { 
      if (!rawUrl || typeof rawUrl !== 'string') return rawUrl; 
-     
+      
      // Prevent recursive proxy wrapping 
      if (rawUrl.indexOf(PROXY_BASE) === 0) return rawUrl; 
 
      // Check if url targets GD server endpoints or relative PHP files 
-     var isGdRequest = rawUrl.indexOf('.php') >= 0 || 
-                       rawUrl.indexOf('database') >= 0 || 
+     var isGdRequest = rawUrl.indexOf('.php') >= 0 ||  
+                       rawUrl.indexOf('database') >= 0 ||  
                        rawUrl.indexOf('boomlings.com') >= 0; 
 
      if (isGdRequest) { 
@@ -66,7 +66,7 @@
        
        return PROXY_BASE + encodeURIComponent(fullUrl); 
      } 
-     
+      
      return rawUrl; 
    } 
 
@@ -75,7 +75,7 @@
    window.fetch = function(input, init) { 
      var url = (typeof input === 'string') ? input : (input && input.url ? input.url : ''); 
      var target = formatProxyUrl(url); 
-     
+      
      if (target !== url) { 
        if (typeof input === 'string') { 
          input = target; 
