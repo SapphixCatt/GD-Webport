@@ -62,9 +62,25 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // Audio stream redirection
-        if (str.includes('newgrounds.com') || str.includes('ungrounded.net') || str.includes('audio.ngfiles.com') || str.endsWith('.mp3')) {
-            return `?songUrl=${encodeURIComponent(str)}`;
+        // Comprehensive audio stream & CDN redirection handler (handles Newgrounds, b-cdn.net, __proxy wrappers, .ogg, .mp3)
+        if (
+            str.includes('newgrounds.com') || 
+            str.includes('ungrounded.net') || 
+            str.includes('audio.ngfiles.com') || 
+            str.includes('b-cdn.net') || 
+            str.includes('__proxy') || 
+            str.includes('?url=') || 
+            str.includes('&url=') || 
+            str.endsWith('.mp3') || 
+            str.endsWith('.ogg')
+        ) {
+            let target = str;
+            if (str.includes('?url=')) {
+                target = decodeURIComponent(str.split('?url=')[1]);
+            } else if (str.includes('&url=')) {
+                target = decodeURIComponent(str.split('&url=')[1]);
+            }
+            return `?songUrl=${encodeURIComponent(target)}`;
         }
 
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
