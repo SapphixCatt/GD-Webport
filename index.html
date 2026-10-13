@@ -232,7 +232,8 @@ function saveFS() {
   }
 }
 
-setInterval(saveFS, 30000);
+// Autosave every 10 minutes (600000ms) when in menus/idle, avoiding gameplay stutters
+setInterval(saveFS, 600000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
 
