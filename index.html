@@ -52,7 +52,7 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Network Interceptor (Cloudflare Proxy for PHP & Newgrounds Songs) -->
+<!-- Network Interceptor (Cloudflare Proxy for PHP, SFX, Music & Newgrounds) -->
 <script>
 (function() {
     const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
@@ -62,7 +62,7 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // Unwrap internal proxy wrappers if any exist
+        // Unwrap internal proxy wrappers if present
         if (str.includes('__proxy?url=')) {
             const parts = str.split('__proxy?url=');
             if (parts[1]) {
@@ -70,10 +70,11 @@ canvas {
             }
         }
 
-        // Route Newgrounds & audio URLs through the proxy using ?songUrl=
+        // Route all audio files (SFX, Music CDN, Newgrounds) through the proxy using ?songUrl=
         if (
+            str.includes('geometrydashfiles.b-cdn.net') || 
             str.includes('audio.ngfiles.com') || 
-            str.includes('b-cdn.net/music/') || 
+            str.includes('b-cdn.net/') || 
             str.endsWith('.mp3') || 
             str.endsWith('.ogg') ||
             str.includes('songUrl=')
@@ -87,10 +88,27 @@ canvas {
             return { type: 'song', targetUrl: target };
         }
 
-        // Route database PHP requests through the proxy using ?endpoint=
-        const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
-        if (match) {
-            return { type: 'php', targetUrl: `${WORKER_URL}/?endpoint=${match[1]}` };
+        // Match all GD database PHP endpoints (including login, account sync, level searches, etc.)
+        const gdEndpoints = [
+            'loginGJAccount', 'registerGJAccount', 'backupGJAccount', 'restoreGJAccount',
+            'syncGJAccount', 'saveGJAccount', 'updateGJAcc', 'updateGJUserScore',
+            'getGJLevels', 'getGJUserInfo', 'uploadGJLevel', 'likeGJItem', 'getGJComment',
+            'uploadGJComment', 'deleteGJComment', 'rateGJLevel', 'getGJLeaderboard',
+            'getGJChal', 'getGJRewards', 'getGJMapPack', 'getGJPackages', 'getGJSongInfo'
+        ];
+
+        for (const ep of gdEndpoints) {
+            if (str.includes(ep)) {
+                const filenameMatch = str.match(new RegExp(`(${ep}\\.php|${ep})`, 'i'));
+                const endpointName = filenameMatch ? filenameMatch[1] : (ep + '.php');
+                const finalEp = endpointName.endsWith('.php') ? endpointName : endpointName + '.php';
+                return { type: 'php', targetUrl: `${WORKER_URL}/?endpoint=${finalEp}` };
+            }
+        }
+
+        const matchPhp = str.match(/([a-zA-Z0-9_-]+\.php)/i);
+        if (matchPhp) {
+            return { type: 'php', targetUrl: `${WORKER_URL}/?endpoint=${matchPhp[1]}` };
         }
 
         return null;
