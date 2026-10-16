@@ -269,7 +269,7 @@ function restoreSaves(then) {
     isRestoring = false;
     if (!called) { called = true; if (then) then(); } 
   }
-  var safetyTimer = setTimeout(finish, 1500);
+  var safetyTimer = setTimeout(finish, 2500);
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
@@ -286,7 +286,17 @@ function restoreSaves(then) {
           clearTimeout(safetyTimer);
           var keys = keysReq.result || [];
           var vals = valsReq.result || [];
-          for (var i = 0; i < keys.length; i++) {
+          if (!keys.length) {
+            finish();
+            return;
+          }
+          
+          let i = 0;
+          function processNextFile() {
+            if (i >= keys.length) {
+              finish();
+              return;
+            }
             try {
               var k = keys[i];
               var res = vals[i];
@@ -301,8 +311,11 @@ function restoreSaves(then) {
                 Module.FS.writeFile(base + s, new Uint8Array(res));
               }
             } catch (e) {}
+            i++;
+            // Non-blocking chunked write loop to prevent UI freezing
+            setTimeout(processNextFile, 4);
           }
-          finish();
+          processNextFile();
         };
         tx.onerror = function() { clearTimeout(safetyTimer); finish(); };
       } catch (e) { clearTimeout(safetyTimer); finish(); }
