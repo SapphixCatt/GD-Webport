@@ -88,24 +88,7 @@ canvas {
             return { type: 'song', targetUrl: target };
         }
 
-        // Match all GD database PHP endpoints (including login, account sync, level searches, etc.)
-        const gdEndpoints = [
-            'loginGJAccount', 'registerGJAccount', 'backupGJAccount', 'restoreGJAccount',
-            'syncGJAccount', 'saveGJAccount', 'updateGJAcc', 'updateGJUserScore',
-            'getGJLevels', 'getGJUserInfo', 'uploadGJLevel', 'likeGJItem', 'getGJComment',
-            'uploadGJComment', 'deleteGJComment', 'rateGJLevel', 'getGJLeaderboard',
-            'getGJChal', 'getGJRewards', 'getGJMapPack', 'getGJPackages', 'getGJSongInfo'
-        ];
-
-        for (const ep of gdEndpoints) {
-            if (str.includes(ep)) {
-                const filenameMatch = str.match(new RegExp(`(${ep}\\.php|${ep})`, 'i'));
-                const endpointName = filenameMatch ? filenameMatch[1] : (ep + '.php');
-                const finalEp = endpointName.endsWith('.php') ? endpointName : endpointName + '.php';
-                return { type: 'php', targetUrl: `${WORKER_URL}/?endpoint=${finalEp}` };
-            }
-        }
-
+        // Clean PHP endpoint extraction (captures loginGJAccount.php, getGJLevels21.php, etc. perfectly)
         const matchPhp = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         if (matchPhp) {
             return { type: 'php', targetUrl: `${WORKER_URL}/?endpoint=${matchPhp[1]}` };
