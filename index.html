@@ -52,10 +52,10 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Network Interceptor (Direct Audio & Proxy for PHP) -->
+<!-- Network Interceptor (Direct Audio & Cloudflare Proxy for PHP) -->
 <script>
 (function() {
-    const WORKER_URL = "https://gdproxy.sapphixcatt.deno.net";
+    const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
 
     function extractPath(inputUrl) {
         if (!inputUrl) return null;
