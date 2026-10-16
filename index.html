@@ -239,23 +239,29 @@ window.addEventListener('beforeunload', saveFS);
 function restoreSaves(then) {
   var called = false;
   function finish() { if (!called) { called = true; then(); } }
-  setTimeout(finish, 3000);
+  // Fail-safe timeout added so IndexedDB load can never freeze the boot sequence
+  var safetyTimer = setTimeout(finish, 1000);
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
-    req.onerror = finish;
+    req.onerror = function() { clearTimeout(safetyTimer); finish(); };
     req.onsuccess = function () {
       var store, keysReq;
       try {
         store = req.result.transaction('files', 'readonly').objectStore('files');
         keysReq = store.getAllKeys();
-      } catch (e) { finish(); return; }
-      keysReq.onerror = finish;
+      } catch (e) { clearTimeout(safetyTimer); finish(); return; }
+      keysReq.onerror = function() { clearTimeout(safetyTimer); finish(); };
       keysReq.onsuccess = function () {
         var keys = keysReq.result || [];
-        if (!keys.length) { finish(); return; }
+        if (!keys.length) { clearTimeout(safetyTimer); finish(); return; }
         var pending = keys.length;
-        function one() { if (--pending === 0) finish(); }
+        function one() { 
+          if (--pending === 0) { 
+            clearTimeout(safetyTimer); 
+            finish(); 
+          } 
+        }
         keys.forEach(function (k) {
           var g = store.get(k);
           g.onerror = one;
@@ -277,7 +283,7 @@ function restoreSaves(then) {
         });
       };
     };
-  } catch (e) { finish(); }
+  } catch (e) { clearTimeout(safetyTimer); finish(); }
 }
 
 var gdDataBlobUrl = null;
@@ -333,6 +339,13 @@ var Module = {
       }
     }
   },
+  preRun: [function() {
+    addRunDependency('restore-saves');
+    try { Module.FS.mkdir('/Resources'); } catch(e) {}
+    restoreSaves(function () {
+      removeRunDependency('restore-saves');
+    });
+  }],
   onRuntimeInitialized: function () {
     window.__gdRuntimeReady = true;
     const overlay = document.getElementById('loading-overlay');
@@ -354,14 +367,10 @@ var Module = {
     }
 
     try { Module.FS.chdir('/Resources'); } catch (e) {}
-    setTimeout(function () {
-      restoreSaves(function () {
-        try {
-          const r = Module._gd_boot();
-          if (r && typeof r.then === 'function') r.catch(function () {});
-        } catch (e) {}
-      });
-    }, 50);
+    try {
+      const r = Module._gd_boot();
+      if (r && typeof r.then === 'function') r.catch(function () {});
+    } catch (e) {}
   }
 };
 
