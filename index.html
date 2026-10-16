@@ -49,7 +49,7 @@ canvas {
 </head>
 
 <body>
-<div id="loading-overlay">Initializing Proxy & Assets...</div>
+<div id="loading-overlay">Initializing Geometry Dash WASM...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
 <!-- Network Interceptor -->
@@ -199,8 +199,7 @@ function saveFS() {
     if (Module.FS) {
       ['CCGameManager.dat', 'CCLocalLevels.dat', 'AppData/CCGameManager.dat', 'AppData/CCLocalLevels.dat'].forEach(function(file) {
         try {
-          var p = file.indexOf('AppData/') === 0 ? '/' + file : '/Resources/' + file;
-          var data = Module.FS.readFile(p);
+          var data = Module.FS.readFile('/' + file);
           if (data && data.length) syncFilesToDB(file, data);
         } catch(e) {}
       });
@@ -215,7 +214,6 @@ setInterval(saveFS, 600000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
 
-// Synchronous-safe save restoration block using Emscripten dependency management
 function restoreSavesBeforeRun(done) {
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
@@ -240,13 +238,12 @@ function restoreSavesBeforeRun(done) {
             try {
               if (g.result && g.result.byteLength) {
                 var s = String(k);
-                var base = s.indexOf('AppData/') === 0 ? '/' : '/Resources/';
-                var parts = s.split('/'), cur = base.replace(/\/$/, '');
+                var parts = s.split('/'), cur = '';
                 for (var pi = 0; pi < parts.length - 1; ++pi) {
                   cur += '/' + parts[pi];
                   try { Module.FS.stat(cur); } catch (e2) { Module.FS.mkdir(cur); }
                 }
-                Module.FS.writeFile(base + s, new Uint8Array(g.result));
+                Module.FS.writeFile('/' + s, new Uint8Array(g.result));
               }
             } catch (e) {}
             one();
@@ -255,24 +252,6 @@ function restoreSavesBeforeRun(done) {
       };
     };
   } catch (e) { done(); }
-}
-
-var gdDataBlobUrl = null;
-
-async function fetchLfsDataFile() {
-  const overlay = document.getElementById('loading-overlay');
-  const lfsUrl = 'https://media.githubusercontent.com/media/SapphixCatt/GD-Webport/main/gd_web.data';
-  if (overlay) overlay.innerText = 'Downloading 314 MB Game Data...';
-  
-  const resp = await fetch(lfsUrl);
-  if (!resp.ok) {
-    console.warn('LFS media endpoint fetch failed, trying local fallback.');
-    return 'gd_web.data';
-  }
-  
-  const blob = await resp.blob();
-  gdDataBlobUrl = URL.createObjectURL(blob);
-  return gdDataBlobUrl;
 }
 
 var Module = {
@@ -290,7 +269,7 @@ var Module = {
   },
   locateFile: function (path, prefix) {
     if (path === 'gd_web.data' || path.endsWith('.data')) {
-      return gdDataBlobUrl || 'gd_web.data';
+      return 'https://media.githubusercontent.com/media/SapphixCatt/GD-Webport/main/gd_web.data';
     }
     return (prefix || '') + path;
   },
@@ -304,15 +283,7 @@ var Module = {
     }
   },
   preRun: [function() {
-    // Pause runtime initialization until virtual directory structure is ready and saves are populated
     addRunDependency('restore-saves');
-    try {
-      Module.FS.mkdir('/Resources');
-    } catch(e) {}
-    try {
-      Module.FS.chdir('/Resources');
-    } catch(e) {}
-
     restoreSavesBeforeRun(function() {
       removeRunDependency('restore-saves');
     });
@@ -329,7 +300,7 @@ var Module = {
       Module.FS.writeFile = function (path, data, opts) {
         var res = origWrite.apply(this, arguments);
         if (path && (path.indexOf('CCLocalLevels') >= 0 || path.indexOf('CCGameManager') >= 0 || path.indexOf('.dat') >= 0)) {
-          var cleanKey = path.replace(/^\/(Resources\/)?/, '');
+          var cleanKey = path.replace(/^\//, '');
           syncFilesToDB(cleanKey, data);
         }
         return res;
@@ -344,12 +315,6 @@ async function gdStart() {
   window.__gdInputReady = true;
   var c = document.getElementById('canvas');
   if (c) c.focus();
-  
-  try {
-    await fetchLfsDataFile();
-  } catch (err) {
-    console.error('Failed to load LFS data file:', err);
-  }
 
   fetch('gd_web.js', { cache: 'no-store' }).then(function (r) {
     return r.text();
