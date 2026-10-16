@@ -144,12 +144,19 @@ canvas {
                 }
             }).then(async (res) => {
                 const text = await res.text();
-                Object.defineProperty(xhr, 'responseText', { value: text, configurable: true });
-                Object.defineProperty(xhr, 'response', { value: text, configurable: true });
-                Object.defineProperty(xhr, 'status', { value: 200, configurable: true });
-                Object.defineProperty(xhr, 'readyState', { value: 4, configurable: true });
-                if (xhr.onreadystatechange) xhr.onreadystatechange();
-                if (xhr.onload) xhr.onload();
+                // Yield to event loop using setTimeout so massive sync payloads don't freeze the main thread
+                setTimeout(() => {
+                    try {
+                        Object.defineProperty(xhr, 'responseText', { value: text, configurable: true });
+                        Object.defineProperty(xhr, 'response', { value: text, configurable: true });
+                        Object.defineProperty(xhr, 'status', { value: 200, configurable: true });
+                        Object.defineProperty(xhr, 'readyState', { value: 4, configurable: true });
+                        if (xhr.onreadystatechange) xhr.onreadystatechange();
+                        if (xhr.onload) xhr.onload();
+                    } catch (e) {
+                        console.error("XHR injection error:", e);
+                    }
+                }, 10);
             });
             return;
         }
@@ -239,29 +246,23 @@ window.addEventListener('beforeunload', saveFS);
 function restoreSaves(then) {
   var called = false;
   function finish() { if (!called) { called = true; then(); } }
-  // Fail-safe timeout added so IndexedDB load can never freeze the boot sequence
-  var safetyTimer = setTimeout(finish, 1000);
+  setTimeout(finish, 3000);
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
-    req.onerror = function() { clearTimeout(safetyTimer); finish(); };
+    req.onerror = finish;
     req.onsuccess = function () {
       var store, keysReq;
       try {
         store = req.result.transaction('files', 'readonly').objectStore('files');
         keysReq = store.getAllKeys();
-      } catch (e) { clearTimeout(safetyTimer); finish(); return; }
-      keysReq.onerror = function() { clearTimeout(safetyTimer); finish(); };
+      } catch (e) { finish(); return; }
+      keysReq.onerror = finish;
       keysReq.onsuccess = function () {
         var keys = keysReq.result || [];
-        if (!keys.length) { clearTimeout(safetyTimer); finish(); return; }
+        if (!keys.length) { finish(); return; }
         var pending = keys.length;
-        function one() { 
-          if (--pending === 0) { 
-            clearTimeout(safetyTimer); 
-            finish(); 
-          } 
-        }
+        function one() { if (--pending === 0) finish(); }
         keys.forEach(function (k) {
           var g = store.get(k);
           g.onerror = one;
@@ -283,7 +284,7 @@ function restoreSaves(then) {
         });
       };
     };
-  } catch (e) { clearTimeout(safetyTimer); finish(); }
+  } catch (e) { finish(); }
 }
 
 var gdDataBlobUrl = null;
@@ -340,8 +341,8 @@ var Module = {
     }
   },
   preRun: [function() {
-    addRunDependency('restore-saves');
     try { Module.FS.mkdir('/Resources'); } catch(e) {}
+    addRunDependency('restore-saves');
     restoreSaves(function () {
       removeRunDependency('restore-saves');
     });
