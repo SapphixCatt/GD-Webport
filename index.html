@@ -86,7 +86,8 @@ canvas {
     }
 
     async function fetchWithWorker(path, init) {
-        const proxyTarget = `${WORKER_URL}/${path}`;
+        // Automatically route PHP files through ?endpoint= and keep query strings like ?songUrl= intact
+        const proxyTarget = path.startsWith('?') ? `${WORKER_URL}/${path}` : `${WORKER_URL}/?endpoint=${path}`;
         
         try {
             const controller = new AbortController();
