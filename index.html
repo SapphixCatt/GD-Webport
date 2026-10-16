@@ -52,7 +52,7 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Network Interceptor with Robust Audio Fallback -->
+<!-- Network Interceptor (Direct Audio & Proxy for PHP) -->
 <script>
 (function() {
     const WORKER_URL = "https://gdproxy.sapphixcatt.deno.net";
@@ -62,31 +62,13 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // Audio stream redirection
-        if (
-            str.includes('audio.ngfiles.com') || 
-            str.includes('b-cdn.net/music/') || 
-            str.endsWith('.mp3') || 
-            str.endsWith('.ogg') ||
-            (str.includes('?url=') && (str.includes('.mp3') || str.includes('.ogg') || str.includes('music'))) ||
-            (str.includes('&url=') && (str.includes('.mp3') || str.includes('.ogg') || str.includes('music')))
-        ) {
-            let target = str;
-            if (str.includes('?url=')) {
-                target = decodeURIComponent(str.split('?url=')[1].split('&')[0]);
-            } else if (str.includes('&url=')) {
-                target = decodeURIComponent(str.split('&url=')[1].split('&')[0]);
-            }
-            return `?songUrl=${encodeURIComponent(target)}`;
-        }
-
-        // Clean PHP endpoint extraction
+        // Clean PHP endpoint extraction for database requests
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
 
     async function fetchWithWorker(path, init) {
-        const proxyTarget = path.startsWith('?') ? `${WORKER_URL}/${path}` : `${WORKER_URL}/?endpoint=${path}`;
+        const proxyTarget = `${WORKER_URL}/?endpoint=${path}`;
         
         try {
             const controller = new AbortController();
@@ -100,29 +82,10 @@ canvas {
             clearTimeout(timeoutId);
 
             if (res.ok) {
-                // If it's a song request and the proxy returned -1 or failed, fallback to direct fetch
-                if (path.startsWith('?songUrl=')) {
-                    const clone = res.clone();
-                    const textCheck = await clone.text();
-                    if (textCheck.trim() === '-1') {
-                        const targetUrl = decodeURIComponent(path.split('?songUrl=')[1]);
-                        const directRes = await originalFetch(targetUrl, init).catch(() => null);
-                        if (directRes && directRes.ok) return directRes;
-                    }
-                }
                 return res;
             }
         } catch (e) {
             console.warn("Proxy fetch failed:", e);
-        }
-
-        // Fallback for song requests if proxy is unreachable
-        if (path && path.startsWith('?songUrl=')) {
-            try {
-                const targetUrl = decodeURIComponent(path.split('?songUrl=')[1]);
-                const directRes = await originalFetch(targetUrl, init);
-                if (directRes && directRes.ok) return directRes;
-            } catch (err) {}
         }
 
         return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
@@ -182,8 +145,10 @@ canvas {
 
 <script>
 var isSyncing = false;
+var isRestoring = false;
 
 function syncFilesToDB(filePath, data) {
+  if (isRestoring) return;
   if (window.requestIdleCallback) {
     requestIdleCallback(function() { doSave(filePath, data); });
   } else {
@@ -192,6 +157,7 @@ function syncFilesToDB(filePath, data) {
 }
 
 function doSave(filePath, data) {
+  if (isRestoring) return;
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
@@ -221,7 +187,7 @@ function isPlayerInLevel() {
 }
 
 function saveFS() {
-  if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing) return;
+  if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing || isRestoring) return;
   
   if (isPlayerInLevel()) {
     return;
@@ -259,9 +225,13 @@ document.addEventListener('visibilitychange', function () { if (document.hidden)
 window.addEventListener('beforeunload', saveFS);
 
 function restoreSaves(then) {
+  isRestoring = true;
   var called = false;
-  function finish() { if (!called) { called = true; if (then) then(); } }
-  var safetyTimer = setTimeout(finish, 2000);
+  function finish() { 
+    isRestoring = false;
+    if (!called) { called = true; if (then) then(); } 
+  }
+  var safetyTimer = setTimeout(finish, 1500);
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
@@ -278,7 +248,7 @@ function restoreSaves(then) {
         if (!keys.length) { clearTimeout(safetyTimer); finish(); return; }
         var pending = keys.length;
         function one() { 
-          if (--pending === 0) { 
+          if (--pending <= 0) { 
             clearTimeout(safetyTimer); 
             finish(); 
           } 
@@ -371,7 +341,7 @@ var Module = {
       var origWrite = Module.FS.writeFile;
       Module.FS.writeFile = function (path, data, opts) {
         var res = origWrite.apply(this, arguments);
-        if (path && (path.indexOf('CCLocalLevels') >= 0 || path.indexOf('CCGameManager') >= 0 || path.indexOf('.dat') >= 0)) {
+        if (!isRestoring && path && (path.indexOf('CCLocalLevels') >= 0 || path.indexOf('CCGameManager') >= 0 || path.indexOf('.dat') >= 0)) {
           var cleanKey = path.replace(/^\/(Resources\/)?/, '');
           syncFilesToDB(cleanKey, data);
         }
@@ -381,8 +351,6 @@ var Module = {
     }
 
     try { Module.FS.chdir('/Resources'); } catch (e) {}
-    
-    // Non-blocking save restoration executed safely after runtime boot
     setTimeout(function () {
       restoreSaves(function () {
         try {
