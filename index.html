@@ -156,104 +156,6 @@ canvas {
 </script>
 
 <script>
-var isSyncing = false;
-
-function syncFilesToDB(filePath, data) {
-  if (window.requestIdleCallback) {
-    requestIdleCallback(function() { doSave(filePath, data); });
-  } else {
-    setTimeout(function() { doSave(filePath, data); }, 0);
-  }
-}
-
-function doSave(filePath, data) {
-  try {
-    var req = indexedDB.open('gdwasm_saves', 1);
-    req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
-    req.onsuccess = function () {
-      try {
-        var db = req.result;
-        var tx = db.transaction('files', 'readwrite');
-        var store = tx.objectStore('files');
-        var buf = (data && data.buffer && data.byteLength !== undefined) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data;
-        if (buf) store.put(buf, filePath);
-      } catch (e) {}
-    };
-  } catch (e) {}
-}
-
-function isPlayerInLevel() {
-  if (typeof Module === 'undefined') return false;
-  try {
-    if (Module._gd_is_in_play_layer && Module._gd_is_in_play_layer()) return true;
-    if (Module.gdIsInPlayLayer === true) return true;
-  } catch(e) {}
-  return false;
-}
-
-function saveFS() {
-  if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing || isPlayerInLevel()) return;
-  isSyncing = true;
-  try {
-    if (Module._gd_request_save) Module._gd_request_save();
-    if (Module.FS) {
-      ['CCGameManager.dat', 'CCLocalLevels.dat', 'AppData/CCGameManager.dat', 'AppData/CCLocalLevels.dat'].forEach(function(file) {
-        try {
-          var data = Module.FS.readFile('/' + file);
-          if (data && data.length) syncFilesToDB(file, data);
-        } catch(e) {}
-      });
-      if (Module.FS.syncfs) {
-        Module.FS.syncfs(false, function () { isSyncing = false; });
-      } else { isSyncing = false; }
-    } else { isSyncing = false; }
-  } catch (e) { isSyncing = false; }
-}
-
-setInterval(saveFS, 600000);
-document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
-window.addEventListener('beforeunload', saveFS);
-
-function restoreSavesBeforeRun(done) {
-  try {
-    var req = indexedDB.open('gdwasm_saves', 1);
-    req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
-    req.onerror = function() { done(); };
-    req.onsuccess = function () {
-      var store, keysReq;
-      try {
-        store = req.result.transaction('files', 'readonly').objectStore('files');
-        keysReq = store.getAllKeys();
-      } catch (e) { done(); return; }
-      keysReq.onerror = function() { done(); };
-      keysReq.onsuccess = function () {
-        var keys = keysReq.result || [];
-        if (!keys.length) { done(); return; }
-        var pending = keys.length;
-        function one() { if (--pending === 0) done(); }
-        keys.forEach(function (k) {
-          var g = store.get(k);
-          g.onerror = one;
-          g.onsuccess = function () {
-            try {
-              if (g.result && g.result.byteLength) {
-                var s = String(k);
-                var parts = s.split('/'), cur = '';
-                for (var pi = 0; pi < parts.length - 1; ++pi) {
-                  cur += '/' + parts[pi];
-                  try { Module.FS.stat(cur); } catch (e2) { Module.FS.mkdir(cur); }
-                }
-                Module.FS.writeFile('/' + s, new Uint8Array(g.result));
-              }
-            } catch (e) {}
-            one();
-          };
-        });
-      };
-    };
-  } catch (e) { done(); }
-}
-
 var Module = {
   canvas: (function() { return document.getElementById('canvas'); })(),
   gdInputQueue: [],
@@ -282,31 +184,10 @@ var Module = {
       else { overlay.innerText = text; }
     }
   },
-  preRun: [function() {
-    addRunDependency('restore-saves');
-    restoreSavesBeforeRun(function() {
-      removeRunDependency('restore-saves');
-    });
-  }],
   onRuntimeInitialized: function () {
     window.__gdRuntimeReady = true;
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.style.display = 'none';
-
-    if (Module._gd_autosave_set) Module._gd_autosave_set(1);
-    
-    if (Module.FS && Module.FS.writeFile && !Module.FS.__hooked) {
-      var origWrite = Module.FS.writeFile;
-      Module.FS.writeFile = function (path, data, opts) {
-        var res = origWrite.apply(this, arguments);
-        if (path && (path.indexOf('CCLocalLevels') >= 0 || path.indexOf('CCGameManager') >= 0 || path.indexOf('.dat') >= 0)) {
-          var cleanKey = path.replace(/^\//, '');
-          syncFilesToDB(cleanKey, data);
-        }
-        return res;
-      };
-      Module.FS.__hooked = true;
-    }
   }
 };
 
