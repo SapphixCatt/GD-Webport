@@ -52,7 +52,7 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Network Interceptor -->
+<!-- Network Interceptor with Robust Audio Fallback -->
 <script>
 (function() {
     const WORKER_URL = "https://gdproxy.sapphixcatt.deno.net";
@@ -86,7 +86,6 @@ canvas {
     }
 
     async function fetchWithWorker(path, init) {
-        // Automatically route PHP files through ?endpoint= and keep query strings like ?songUrl= intact
         const proxyTarget = path.startsWith('?') ? `${WORKER_URL}/${path}` : `${WORKER_URL}/?endpoint=${path}`;
         
         try {
@@ -101,10 +100,29 @@ canvas {
             clearTimeout(timeoutId);
 
             if (res.ok) {
+                // If it's a song request and the proxy returned -1 or failed, fallback to direct fetch
+                if (path.startsWith('?songUrl=')) {
+                    const clone = res.clone();
+                    const textCheck = await clone.text();
+                    if (textCheck.trim() === '-1') {
+                        const targetUrl = decodeURIComponent(path.split('?songUrl=')[1]);
+                        const directRes = await originalFetch(targetUrl, init).catch(() => null);
+                        if (directRes && directRes.ok) return directRes;
+                    }
+                }
                 return res;
             }
         } catch (e) {
             console.warn("Proxy fetch failed:", e);
+        }
+
+        // Fallback for song requests if proxy is unreachable
+        if (path && path.startsWith('?songUrl=')) {
+            try {
+                const targetUrl = decodeURIComponent(path.split('?songUrl=')[1]);
+                const directRes = await originalFetch(targetUrl, init);
+                if (directRes && directRes.ok) return directRes;
+            } catch (err) {}
         }
 
         return new Response("-1", { status: 200, headers: { 'Content-Type': 'text/html' } });
@@ -144,7 +162,6 @@ canvas {
                 }
             }).then(async (res) => {
                 const text = await res.text();
-                // Yield to event loop using setTimeout so massive sync payloads don't freeze the main thread
                 setTimeout(() => {
                     try {
                         Object.defineProperty(xhr, 'responseText', { value: text, configurable: true });
@@ -153,9 +170,7 @@ canvas {
                         Object.defineProperty(xhr, 'readyState', { value: 4, configurable: true });
                         if (xhr.onreadystatechange) xhr.onreadystatechange();
                         if (xhr.onload) xhr.onload();
-                    } catch (e) {
-                        console.error("XHR injection error:", e);
-                    }
+                    } catch (e) {}
                 }, 10);
             });
             return;
@@ -245,24 +260,29 @@ window.addEventListener('beforeunload', saveFS);
 
 function restoreSaves(then) {
   var called = false;
-  function finish() { if (!called) { called = true; then(); } }
-  setTimeout(finish, 3000);
+  function finish() { if (!called) { called = true; if (then) then(); } }
+  var safetyTimer = setTimeout(finish, 2000);
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
-    req.onerror = finish;
+    req.onerror = function() { clearTimeout(safetyTimer); finish(); };
     req.onsuccess = function () {
       var store, keysReq;
       try {
         store = req.result.transaction('files', 'readonly').objectStore('files');
         keysReq = store.getAllKeys();
-      } catch (e) { finish(); return; }
-      keysReq.onerror = finish;
+      } catch (e) { clearTimeout(safetyTimer); finish(); return; }
+      keysReq.onerror = function() { clearTimeout(safetyTimer); finish(); };
       keysReq.onsuccess = function () {
         var keys = keysReq.result || [];
-        if (!keys.length) { finish(); return; }
+        if (!keys.length) { clearTimeout(safetyTimer); finish(); return; }
         var pending = keys.length;
-        function one() { if (--pending === 0) finish(); }
+        function one() { 
+          if (--pending === 0) { 
+            clearTimeout(safetyTimer); 
+            finish(); 
+          } 
+        }
         keys.forEach(function (k) {
           var g = store.get(k);
           g.onerror = one;
@@ -284,7 +304,7 @@ function restoreSaves(then) {
         });
       };
     };
-  } catch (e) { finish(); }
+  } catch (e) { clearTimeout(safetyTimer); finish(); }
 }
 
 var gdDataBlobUrl = null;
@@ -340,13 +360,6 @@ var Module = {
       }
     }
   },
-  preRun: [function() {
-    try { Module.FS.mkdir('/Resources'); } catch(e) {}
-    addRunDependency('restore-saves');
-    restoreSaves(function () {
-      removeRunDependency('restore-saves');
-    });
-  }],
   onRuntimeInitialized: function () {
     window.__gdRuntimeReady = true;
     const overlay = document.getElementById('loading-overlay');
@@ -368,10 +381,16 @@ var Module = {
     }
 
     try { Module.FS.chdir('/Resources'); } catch (e) {}
-    try {
-      const r = Module._gd_boot();
-      if (r && typeof r.then === 'function') r.catch(function () {});
-    } catch (e) {}
+    
+    // Non-blocking save restoration executed safely after runtime boot
+    setTimeout(function () {
+      restoreSaves(function () {
+        try {
+          const r = Module._gd_boot();
+          if (r && typeof r.then === 'function') r.catch(function () {});
+        } catch (e) {}
+      });
+    }, 50);
   }
 };
 
