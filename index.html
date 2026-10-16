@@ -86,7 +86,6 @@ canvas {
     }
 
     async function fetchWithWorker(path, init) {
-        // Automatically route PHP files through ?endpoint= and keep query strings like ?songUrl= intact
         const proxyTarget = path.startsWith('?') ? `${WORKER_URL}/${path}` : `${WORKER_URL}/?endpoint=${path}`;
         
         try {
@@ -321,8 +320,12 @@ var Module = {
     }
     return (prefix || '') + path;
   },
-  print: function (text) {},
-  printErr: function (text) {},
+  print: function (text) {
+    console.log("[GD WASM]:", text);
+  },
+  printErr: function (text) {
+    console.error("[GD WASM Error]:", text);
+  },
   setStatus: function (text) {
     const overlay = document.getElementById('loading-overlay');
     if (overlay) {
@@ -358,8 +361,10 @@ var Module = {
       restoreSaves(function () {
         try {
           const r = Module._gd_boot();
-          if (r && typeof r.then === 'function') r.catch(function () {});
-        } catch (e) {}
+          if (r && typeof r.then === 'function') r.catch(function (err) { console.error("Boot error:", err); });
+        } catch (e) {
+          console.error("Boot exception:", e);
+        }
       });
     }, 50);
   }
