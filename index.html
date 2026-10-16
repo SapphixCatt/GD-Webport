@@ -62,7 +62,18 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // Clean PHP endpoint extraction for database requests
+        // Explicitly bypass proxy for direct audio URLs so they fetch straight from ngfiles.com
+        if (
+            str.includes('audio.ngfiles.com') || 
+            str.includes('b-cdn.net/music/') || 
+            str.endsWith('.mp3') || 
+            str.endsWith('.ogg') ||
+            str.includes('songUrl=')
+        ) {
+            return null;
+        }
+
+        // Clean PHP endpoint extraction for database requests only
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
