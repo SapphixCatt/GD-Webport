@@ -49,7 +49,7 @@ canvas {
 </head>
 
 <body>
-<div id="loading-overlay">Fetching LFS Assets...</div>
+<div id="loading-overlay">Initializing Proxy & Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
 <!-- Network Interceptor -->
@@ -62,7 +62,6 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // Audio stream redirection
         if (
             str.includes('audio.ngfiles.com') || 
             str.includes('b-cdn.net/music/') || 
@@ -80,7 +79,6 @@ canvas {
             return `?songUrl=${encodeURIComponent(target)}`;
         }
 
-        // Clean PHP endpoint extraction
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
         return match ? match[1] : null;
     }
@@ -187,23 +185,14 @@ function doSave(filePath, data) {
 function isPlayerInLevel() {
   if (typeof Module === 'undefined') return false;
   try {
-    if (Module._gd_is_in_play_layer && Module._gd_is_in_play_layer()) {
-      return true;
-    }
-    if (Module.gdIsInPlayLayer === true) {
-      return true;
-    }
+    if (Module._gd_is_in_play_layer && Module._gd_is_in_play_layer()) return true;
+    if (Module.gdIsInPlayLayer === true) return true;
   } catch(e) {}
   return false;
 }
 
 function saveFS() {
-  if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing) return;
-  
-  if (isPlayerInLevel()) {
-    return;
-  }
-
+  if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing || isPlayerInLevel()) return;
   isSyncing = true;
   try {
     if (Module._gd_request_save) Module._gd_request_save();
@@ -216,45 +205,34 @@ function saveFS() {
         } catch(e) {}
       });
       if (Module.FS.syncfs) {
-        Module.FS.syncfs(false, function (err) {
-          isSyncing = false;
-        });
-      } else {
-        isSyncing = false;
-      }
-    } else {
-      isSyncing = false;
-    }
-  } catch (e) {
-    isSyncing = false;
-  }
+        Module.FS.syncfs(false, function () { isSyncing = false; });
+      } else { isSyncing = false; }
+    } else { isSyncing = false; }
+  } catch (e) { isSyncing = false; }
 }
 
-// Background autosave set strictly to every 10 minutes (600,000 ms)
 setInterval(saveFS, 600000);
 document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
 window.addEventListener('beforeunload', saveFS);
 
-function restoreSaves(then) {
-  var called = false;
-  function finish() { if (!called) { called = true; then(); } }
-  setTimeout(finish, 3000);
+// Synchronous-safe save restoration block using Emscripten dependency management
+function restoreSavesBeforeRun(done) {
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
-    req.onerror = finish;
+    req.onerror = function() { done(); };
     req.onsuccess = function () {
       var store, keysReq;
       try {
         store = req.result.transaction('files', 'readonly').objectStore('files');
         keysReq = store.getAllKeys();
-      } catch (e) { finish(); return; }
-      keysReq.onerror = finish;
+      } catch (e) { done(); return; }
+      keysReq.onerror = function() { done(); };
       keysReq.onsuccess = function () {
         var keys = keysReq.result || [];
-        if (!keys.length) { finish(); return; }
+        if (!keys.length) { done(); return; }
         var pending = keys.length;
-        function one() { if (--pending === 0) finish(); }
+        function one() { if (--pending === 0) done(); }
         keys.forEach(function (k) {
           var g = store.get(k);
           g.onerror = one;
@@ -276,7 +254,7 @@ function restoreSaves(then) {
         });
       };
     };
-  } catch (e) { finish(); }
+  } catch (e) { done(); }
 }
 
 var gdDataBlobUrl = null;
@@ -284,7 +262,6 @@ var gdDataBlobUrl = null;
 async function fetchLfsDataFile() {
   const overlay = document.getElementById('loading-overlay');
   const lfsUrl = 'https://media.githubusercontent.com/media/SapphixCatt/GD-Webport/main/gd_web.data';
-  
   if (overlay) overlay.innerText = 'Downloading 314 MB Game Data...';
   
   const resp = await fetch(lfsUrl);
@@ -299,10 +276,7 @@ async function fetchLfsDataFile() {
 }
 
 var Module = {
-  canvas: (function() {
-    var c = document.getElementById('canvas');
-    return c;
-  })(),
+  canvas: (function() { return document.getElementById('canvas'); })(),
   gdInputQueue: [],
   gdCursorPos: [0, 0],
   webglContextAttributes: {
@@ -320,22 +294,29 @@ var Module = {
     }
     return (prefix || '') + path;
   },
-  print: function (text) {
-    console.log("[GD WASM]:", text);
-  },
-  printErr: function (text) {
-    console.error("[GD WASM Error]:", text);
-  },
+  print: function (text) { console.log("[GD WASM]:", text); },
+  printErr: function (text) { console.error("[GD WASM Error]:", text); },
   setStatus: function (text) {
     const overlay = document.getElementById('loading-overlay');
     if (overlay) {
-      if (!text) {
-        overlay.style.display = 'none';
-      } else {
-        overlay.innerText = text;
-      }
+      if (!text) { overlay.style.display = 'none'; }
+      else { overlay.innerText = text; }
     }
   },
+  preRun: [function() {
+    // Pause runtime initialization until virtual directory structure is ready and saves are populated
+    addRunDependency('restore-saves');
+    try {
+      Module.FS.mkdir('/Resources');
+    } catch(e) {}
+    try {
+      Module.FS.chdir('/Resources');
+    } catch(e) {}
+
+    restoreSavesBeforeRun(function() {
+      removeRunDependency('restore-saves');
+    });
+  }],
   onRuntimeInitialized: function () {
     window.__gdRuntimeReady = true;
     const overlay = document.getElementById('loading-overlay');
@@ -355,18 +336,6 @@ var Module = {
       };
       Module.FS.__hooked = true;
     }
-
-    try { Module.FS.chdir('/Resources'); } catch (e) {}
-    setTimeout(function () {
-      restoreSaves(function () {
-        try {
-          const r = Module._gd_boot();
-          if (r && typeof r.then === 'function') r.catch(function (err) { console.error("Boot error:", err); });
-        } catch (e) {
-          console.error("Boot exception:", e);
-        }
-      });
-    }, 50);
   }
 };
 
@@ -437,9 +406,7 @@ window.addEventListener('DOMContentLoaded', gdStart);
     Module.gdInputQueue.push([m | 0, w | 0, l | 0]);
   }
 
-  window.addEventListener('click', function() {
-    if (el) el.focus();
-  });
+  window.addEventListener('click', function() { if (el) el.focus(); });
 
   window.addEventListener('mousedown', function (e) {
     if (!ready() || e.target !== el) return;
