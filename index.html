@@ -52,7 +52,7 @@ canvas {
 <div id="loading-overlay">Fetching LFS Assets...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Network Interceptor (Proxy for PHP API, Direct for Audio) -->
+<!-- Network Interceptor (Cloudflare Proxy for PHP, Direct for Audio) -->
 <script>
 (function() {
     const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
@@ -62,34 +62,21 @@ canvas {
         let str = String(inputUrl);
         try { str = decodeURIComponent(str); } catch(e) {}
 
-        // 1. Explicitly bypass proxy for Newgrounds songs & direct audio files
+        // Explicitly bypass proxy for direct audio URLs so they fetch straight from ngfiles.com
         if (
             str.includes('audio.ngfiles.com') || 
             str.includes('b-cdn.net/music/') || 
             str.endsWith('.mp3') || 
             str.endsWith('.ogg') ||
             str.includes('songUrl=') ||
-            str.includes('?url=') ||
-            str.includes('&url=')
+            str.includes('__proxy?url=')
         ) {
-            let target = str;
-            if (str.includes('?url=')) {
-                target = decodeURIComponent(str.split('?url=')[1].split('&')[0]);
-            } else if (str.includes('&url=')) {
-                target = decodeURIComponent(str.split('&url=')[1].split('&')[0]);
-            } else if (str.includes('songUrl=')) {
-                target = decodeURIComponent(str.split('songUrl=')[1].split('&')[0]);
-            }
-            return { type: 'directAudio', url: target };
+            return null;
         }
 
-        // 2. Route game database PHP requests through the Cloudflare proxy
+        // Clean PHP endpoint extraction for database requests only
         const match = str.match(/([a-zA-Z0-9_-]+\.php)/i);
-        if (match) {
-            return { type: 'proxy', endpoint: match[1] };
-        }
-
-        return null;
+        return match ? match[1] : null;
     }
 
     async function fetchWithWorker(path, init) {
@@ -119,14 +106,10 @@ canvas {
     const originalFetch = window.fetch;
     window.fetch = async function(resource, init) {
         let urlStr = typeof resource === 'string' ? resource : (resource ? resource.url : '');
-        const info = extractPath(urlStr);
+        const path = extractPath(urlStr);
 
-        if (info) {
-            if (info.type === 'directAudio') {
-                return originalFetch.call(this, info.url, init);
-            } else if (info.type === 'proxy') {
-                return fetchWithWorker(info.endpoint, init);
-            }
+        if (path) {
+            return fetchWithWorker(path, init);
         }
 
         return originalFetch.apply(this, arguments);
@@ -134,11 +117,10 @@ canvas {
 
     const originalOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
-        const info = extractPath(url);
-        if (info && info.type === 'proxy') {
-            this.__gdEndpoint = info.endpoint;
+        const path = extractPath(url);
+        if (path) {
+            this.__gdEndpoint = path;
             this.__gdMethod = method;
-            return originalOpen.call(this, method, `${WORKER_URL}/?endpoint=${info.endpoint}`, async, user, password);
         }
         return originalOpen.call(this, method, url, async, user, password);
     };
@@ -261,48 +243,56 @@ function restoreSaves(then) {
     isRestoring = false;
     if (!called) { called = true; if (then) then(); } 
   }
-  var safetyTimer = setTimeout(finish, 2500);
+  var safetyTimer = setTimeout(finish, 2000);
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
     req.onerror = function() { clearTimeout(safetyTimer); finish(); };
     req.onsuccess = function () {
-      var store, keysReq;
+      var db = req.result;
+      var keysReq;
       try {
-        store = req.result.transaction('files', 'readonly').objectStore('files');
+        var tx = db.transaction('files', 'readonly');
+        var store = tx.objectStore('files');
         keysReq = store.getAllKeys();
       } catch (e) { clearTimeout(safetyTimer); finish(); return; }
       keysReq.onerror = function() { clearTimeout(safetyTimer); finish(); };
       keysReq.onsuccess = function () {
         var keys = keysReq.result || [];
         if (!keys.length) { clearTimeout(safetyTimer); finish(); return; }
-        let index = 0;
-        function processNext() {
-          if (index >= keys.length) {
-            clearTimeout(safetyTimer);
-            finish();
-            return;
-          }
-          var k = keys[index++];
-          var g = store.get(k);
-          g.onerror = processNext;
-          g.onsuccess = function () {
-            try {
-              if (g.result && g.result.byteLength) {
-                var s = String(k);
-                var base = s.indexOf('AppData/') === 0 ? '/' : '/Resources/';
-                var parts = s.split('/'), cur = base.replace(/\/$/, '');
-                for (var pi = 0; pi < parts.length - 1; ++pi) {
-                  cur += '/' + parts[pi];
-                  try { Module.FS.stat(cur); } catch (e2) { Module.FS.mkdir(cur); }
-                }
-                Module.FS.writeFile(base + s, new Uint8Array(g.result));
-              }
-            } catch (e) {}
-            setTimeout(processNext, 4);
-          };
+        var pending = keys.length;
+        function one() { 
+          if (--pending <= 0) { 
+            clearTimeout(safetyTimer); 
+            finish(); 
+          } 
         }
-        processNext();
+        keys.forEach(function (k) {
+          try {
+            // Open a fresh transaction per key to prevent transaction expiration errors
+            var subTx = db.transaction('files', 'readonly');
+            var subStore = subTx.objectStore('files');
+            var g = subStore.get(k);
+            g.onerror = one;
+            g.onsuccess = function () {
+              try {
+                if (g.result && g.result.byteLength) {
+                  var s = String(k);
+                  var base = s.indexOf('AppData/') === 0 ? '/' : '/Resources/';
+                  var parts = s.split('/'), cur = base.replace(/\/$/, '');
+                  for (var pi = 0; pi < parts.length - 1; ++pi) {
+                    cur += '/' + parts[pi];
+                    try { Module.FS.stat(cur); } catch (e2) { Module.FS.mkdir(cur); }
+                  }
+                  Module.FS.writeFile(base + s, new Uint8Array(g.result));
+                }
+              } catch (e) {}
+              one();
+            };
+          } catch (e) {
+            one();
+          }
+        });
       };
     };
   } catch (e) { clearTimeout(safetyTimer); finish(); }
