@@ -97,7 +97,7 @@ canvas {
 <div id="loading-overlay">Initializing Engine...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
 
-<!-- Network Interceptor & Song Normalization -->
+<!-- Network Interceptor & URL Routing -->
 <script>
 (function() {
     const WORKER_URL = "https://gd-proxy.radekgaming67.workers.dev";
@@ -122,35 +122,42 @@ canvas {
             return null;
         }
 
+        let target = null;
+
         if (str.includes('__proxy?url=')) {
             const parts = str.split('__proxy?url=');
-            if (parts[1]) str = decodeURIComponent(parts[1].split('&')[0]);
-        }
-        if (str.startsWith('/__proxy?url=')) {
+            if (parts[1]) target = decodeURIComponent(parts[1].split('&')[0]);
+        } else if (str.startsWith('/__proxy?url=')) {
             const parts = str.split('/__proxy?url=');
-            if (parts[1]) str = decodeURIComponent(parts[1].split('&')[0]);
+            if (parts[1]) target = decodeURIComponent(parts[1].split('&')[0]);
+        } else {
+            target = str;
         }
 
-        if (
-            str.includes('ngfiles.com') || 
-            str.includes('b-cdn.net') || 
-            str.includes('newgrounds.com/audio/download/') || 
-            str.endsWith('.mp3') || 
-            str.endsWith('.ogg') ||
-            str.includes('.mp3?') ||
-            str.includes('.ogg?') ||
-            str.includes('songUrl=')
-        ) {
-            let target = str;
-            if (str.includes('songUrl=')) {
-                target = decodeURIComponent(str.split('songUrl=')[1].split('&')[0]);
-            } else if (str.includes('?url=')) {
-                target = decodeURIComponent(str.split('?url=')[1].split('&')[0]);
+        if (target && (target.includes('.php') || target.includes('database/') || target.includes('accounts/'))) {
+            const matchPhp = target.match(/([a-zA-Z0-9_-]+\.php)/i);
+            if (matchPhp) {
+                const phpFile = matchPhp[1];
+                let prefix = '';
+                if (accountsEndpoints.some(e => phpFile.includes(e)) || target.includes('accounts/')) {
+                    prefix = 'accounts/';
+                }
+                return { type: 'php', targetUrl: `${WORKER_URL}/?endpoint=${prefix}${phpFile}`, originalUrl: str };
             }
+        }
 
-            if (target && (target.startsWith('http://') || target.startsWith('https://'))) {
-                return { type: 'song', targetUrl: target, originalUrl: str };
+        if (target && (target.includes('newgrounds.com') || target.includes('ngfiles.com') || target.includes('/audio/') || target.endsWith('.mp3') || target.endsWith('.ogg'))) {
+            let songTarget = target;
+            if (target.includes('songUrl=')) {
+                songTarget = decodeURIComponent(target.split('songUrl=')[1].split('&')[0]);
+            } else if (target.includes('?url=')) {
+                songTarget = decodeURIComponent(target.split('?url=')[1].split('&')[0]);
             }
+            return { type: 'song', targetUrl: songTarget, originalUrl: str };
+        }
+
+        if (target && (target.includes('geometrydashfiles.b-cdn.net') || target.includes('/news/'))) {
+            return { type: 'news', targetUrl: target, originalUrl: str };
         }
 
         const matchPhp = str.match(/([a-zA-Z0-9_-]+\.php)/i);
@@ -160,7 +167,7 @@ canvas {
             if (accountsEndpoints.some(e => phpFile.includes(e)) || str.includes('accounts/')) {
                 prefix = 'accounts/';
             }
-            return { type: 'php', targetUrl: `${WORKER_URL}/?endpoint=${prefix}${phpFile}` };
+            return { type: 'php', targetUrl: `${WORKER_URL}/?endpoint=${prefix}${phpFile}`, originalUrl: str };
         }
 
         return null;
@@ -170,8 +177,12 @@ canvas {
         try {
             if (!Module.FS) return;
             let songId = null;
-            const matchId = originalUrl.match(/(\d+)(?:_|\.mp3|\.ogg|\/|$)/);
-            if (matchId) songId = matchId[1];
+            const matchId = originalUrl.match(/(\d+)/g);
+            if (matchId) {
+                for (let m of matchId) {
+                    if (m.length >= 4) { songId = m; break; }
+                }
+            }
             if (!songId) return;
 
             const filename = songId + '.mp3';
@@ -210,16 +221,23 @@ canvas {
         } catch (e) {}
     }
 
-    async function proxyFetch(targetUrl, init, isSong = false, originalUrl = '') {
+    async function proxyFetch(targetUrl, init, reqType = 'php', originalUrl = '') {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
             const modifiedInit = Object.assign({}, init || {}, { signal: controller.signal });
-            const res = await originalFetch(targetUrl, modifiedInit);
+            
+            let proxyEndpoint = targetUrl;
+            if (reqType === 'song') {
+                proxyEndpoint = `${WORKER_URL}/?songUrl=${encodeURIComponent(targetUrl)}`;
+            } else if (reqType === 'news') {
+                proxyEndpoint = `${WORKER_URL}/?newsUrl=${encodeURIComponent(targetUrl)}`;
+            }
+
+            const res = await originalFetch(proxyEndpoint, modifiedInit);
             clearTimeout(timeoutId);
             if (res.ok) {
-                if (isSong) {
-                    // Await arrayBuffer fully so the file is written to FS BEFORE the game reads it
+                if (reqType === 'song') {
                     try {
                         const buf = await res.clone().arrayBuffer();
                         cacheDownloadedSong(originalUrl, buf);
@@ -235,10 +253,8 @@ canvas {
     window.fetch = async function(resource, init) {
         let urlStr = typeof resource === 'string' ? resource : (resource ? resource.url : '');
         let reqInfo = extractRequestType(urlStr);
-        if (reqInfo && reqInfo.type === 'song') {
-            return proxyFetch(`${WORKER_URL}/?songUrl=${encodeURIComponent(reqInfo.targetUrl)}`, init, true, reqInfo.targetUrl);
-        } else if (reqInfo && reqInfo.type === 'php') {
-            return proxyFetch(reqInfo.targetUrl, init);
+        if (reqInfo) {
+            return proxyFetch(reqInfo.targetUrl, init, reqInfo.type, reqInfo.originalUrl);
         }
         return originalFetch.apply(this, arguments);
     };
@@ -254,6 +270,13 @@ canvas {
         this.__gdUser = user;
         this.__gdPassword = password;
         this.__gdHeaders = {};
+        
+        const reqInfo = extractRequestType(url);
+        if (reqInfo && reqInfo.type === 'song') {
+            this.__isSongXhr = true;
+            this.__originalSongUrl = reqInfo.targetUrl;
+            try { this.responseType = 'arraybuffer'; } catch(e) {}
+        }
         return;
     };
 
@@ -272,6 +295,9 @@ canvas {
                 xhr.__gdProxyUrl = `${WORKER_URL}/?songUrl=${encodeURIComponent(reqInfo.targetUrl)}`;
                 xhr.__isSongXhr = true;
                 xhr.__originalSongUrl = reqInfo.targetUrl;
+            } else if (reqInfo.type === 'news') {
+                xhr.__gdProxyUrl = `${WORKER_URL}/?newsUrl=${encodeURIComponent(reqInfo.targetUrl)}`;
+                xhr.__isNewsXhr = true;
             } else if (reqInfo.type === 'php') {
                 xhr.__gdProxyUrl = reqInfo.targetUrl;
                 xhr.__gdEndpoint = reqInfo.targetUrl.split('endpoint=')[1];
@@ -292,7 +318,7 @@ canvas {
                 method: xhr.__gdMethod || 'POST', 
                 body: body,
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-            }).then(async (res) => {
+            }, 'php').then(async (res) => {
                 const text = await res.text();
                 setTimeout(() => {
                     try {
