@@ -8,7 +8,9 @@
 <link rel="icon" href="ref/logo.png">
 <title>Geometry Dash 2.209</title>
 
-<!-- Lock Title permanently & set Build ID to match gd_assets.json -->
+<!-- JSZip CDN for bundled zip downloads -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 <script>
 Object.defineProperty(document, 'title', {
   set: function(val) {},
@@ -96,6 +98,19 @@ canvas {
 <div id="errOverlay" role="alert"></div>
 <div id="loading-overlay">Initializing Engine...</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"></canvas>
+
+<!-- Bottom Right Menu Button & Popup -->
+<div id="gd-menu-container" style="position: fixed; bottom: 15px; right: 15px; z-index: 99999; font-family: monospace;">
+  <button id="gd-menu-btn" style="background: rgba(30, 30, 30, 0.85); color: #fff; border: 1px solid #555; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.5);">...</button>
+  <div id="gd-menu-popup" style="display: none; position: absolute; bottom: 45px; right: 0; background: rgba(20, 20, 20, 0.95); border: 1px solid #444; border-radius: 8px; padding: 6px; width: 310px; box-shadow: 0 6px 16px rgba(0,0,0,0.6);">
+    <div id="gd-btn-save" style="padding: 10px 12px; color: #fff; cursor: pointer; border-radius: 4px; font-size: 13px; transition: background 0.15s;" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">Save Progress</div>
+    <div id="gd-btn-download" style="padding: 10px 12px; color: #fff; cursor: pointer; border-radius: 4px; font-size: 13px; transition: background 0.15s;" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">Download Game Progress & Local Levels</div>
+    <div id="gd-btn-import" style="padding: 10px 12px; color: #fff; cursor: pointer; border-radius: 4px; font-size: 13px; transition: background 0.15s;" onmouseover="this.style.background='#333'" onmouseout="this.style.background='transparent'">Import CCGameManager.dat/CCLocalLevels.dat</div>
+    <div style="height: 1px; background: #333; margin: 4px 0;"></div>
+    <div id="gd-btn-clear" style="padding: 10px 12px; color: #ff6b6b; cursor: pointer; border-radius: 4px; font-size: 13px; transition: background 0.15s;" onmouseover="this.style.background='#3a1c1c'" onmouseout="this.style.background='transparent'">Clear Data</div>
+  </div>
+</div>
+<input type="file" id="gd-file-input" multiple accept=".dat" style="display: none;">
 
 <!-- Network Interceptor & URL Routing -->
 <script>
@@ -356,21 +371,12 @@ canvas {
 })();
 </script>
 
-<!-- Shared Save & Song Persistence (Database 'gdwasm_saves') -->
+<!-- Robust IndexedDB Persistence & Manual Save Handler -->
 <script>
 var isSyncing = false;
 var isRestoring = false;
 
 function syncFilesToDB(filePath, data) {
-  if (isRestoring) return;
-  if (window.requestIdleCallback) {
-    requestIdleCallback(function() { doSave(filePath, data); });
-  } else {
-    setTimeout(function() { doSave(filePath, data); }, 0);
-  }
-}
-
-function doSave(filePath, data) {
   if (isRestoring) return;
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
@@ -387,30 +393,31 @@ function doSave(filePath, data) {
   } catch (e) {}
 }
 
-function isPlayerInLevel() {
-  if (typeof Module === 'undefined') return false;
-  try {
-    if (Module._gd_is_in_play_layer && Module._gd_is_in_play_layer()) return true;
-    if (Module.gdIsInPlayLayer === true) return true;
-  } catch(e) {}
-  return false;
-}
-
 function saveFS() {
   if (!window.__gdRuntimeReady || typeof Module === 'undefined' || isSyncing || isRestoring) return;
-  if (isPlayerInLevel()) return;
 
   isSyncing = true;
   try {
-    if (Module._gd_request_save) Module._gd_request_save();
+    if (typeof Module._gd_request_save === 'function') {
+      Module._gd_request_save();
+    } else if (typeof Module._saveGame === 'function') {
+      Module._saveGame();
+    } else if (typeof Module.ccall === 'function') {
+      try { Module.ccall('gd_request_save', null, [], []); } catch(e) {}
+    }
+
     if (Module.FS) {
-      ['CCGameManager.dat', 'CCLocalLevels.dat', 'AppData/CCGameManager.dat', 'AppData/CCLocalLevels.dat'].forEach(function(file) {
-        try {
-          var p = file.indexOf('AppData/') === 0 ? '/' + file : '/Resources/' + file;
-          var data = Module.FS.readFile(p);
-          if (data && data.length) syncFilesToDB(file, data);
-        } catch(e) {}
+      ['CCGameManager.dat', 'CCLocalLevels.dat'].forEach(function(filename) {
+        ['/Resources/' + filename, '/' + filename, '/AppData/' + filename].forEach(function(p) {
+          try {
+            var data = Module.FS.readFile(p);
+            if (data && data.length) {
+              syncFilesToDB(filename, data);
+            }
+          } catch(e) {}
+        });
       });
+
       if (Module.FS.syncfs) {
         Module.FS.syncfs(false, function (err) { isSyncing = false; });
       } else {
@@ -424,22 +431,146 @@ function saveFS() {
   }
 }
 
-setInterval(saveFS, 600000);
-document.addEventListener('visibilitychange', function () { if (document.hidden) saveFS(); });
-window.addEventListener('beforeunload', saveFS);
+// Menu UI interaction & manual triggers
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('gd-menu-btn');
+  const popup = document.getElementById('gd-menu-popup');
+  
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    popup.style.display = popup.style.display === 'block' ? 'none' : 'block';
+  });
 
-function restoreSaves(then) {
-  isRestoring = true;
-  var called = false;
-  function finish() { 
-    isRestoring = false;
-    if (!called) { called = true; if (then) then(); } 
-  }
-  var safetyTimer = setTimeout(finish, 2500);
+  document.addEventListener('click', () => {
+    popup.style.display = 'none';
+  });
+
+  popup.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  // 1. Save Progress
+  document.getElementById('gd-btn-save').addEventListener('click', () => {
+    saveFS();
+    alert('Progress saved successfully!');
+    popup.style.display = 'none';
+  });
+
+  // 2. Download Game Progress & Local Levels (.zip)
+  document.getElementById('gd-btn-download').addEventListener('click', async () => {
+    popup.style.display = 'none';
+    saveFS(); 
+
+    const zip = new JSZip();
+    let added = false;
+
+    ['CCGameManager.dat', 'CCLocalLevels.dat'].forEach(filename => {
+      try {
+        let data = null;
+        if (Module.FS) {
+          try { data = Module.FS.readFile('/Resources/' + filename); } catch(e) {}
+          if (!data) { try { data = Module.FS.readFile('/' + filename); } catch(e) {} }
+          if (!data) { try { data = Module.FS.readFile('/AppData/' + filename); } catch(e) {} }
+        }
+        if (data && data.length) {
+          zip.file(filename, data);
+          added = true;
+        }
+      } catch(e) {}
+    });
+
+    if (!added) {
+      alert("No save files found currently loaded.");
+      return;
+    }
+
+    const content = await zip.generateAsync({type:"blob"});
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "geometry_dash_progress.zip";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // 3. Import CCGameManager.dat / CCLocalLevels.dat
+  document.getElementById('gd-btn-import').addEventListener('click', () => {
+    popup.style.display = 'none';
+    document.getElementById('gd-file-input').click();
+  });
+
+  document.getElementById('gd-file-input').addEventListener('change', function(e) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const validFiles = Array.from(files).filter(f => f.name === 'CCGameManager.dat' || f.name === 'CCLocalLevels.dat');
+    if (validFiles.length === 0) {
+      alert("Please select valid CCGameManager.dat or CCLocalLevels.dat files.");
+      this.value = '';
+      return;
+    }
+
+    let importedCount = 0;
+    isRestoring = true; 
+    validFiles.forEach(file => {
+      const name = file.name;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const arrayBuffer = evt.target.result;
+        const data = new Uint8Array(arrayBuffer);
+        
+        ['/Resources/' + name, '/' + name, '/AppData/' + name].forEach(p => {
+          try { Module.FS.writeFile(p, data); } catch(err) {}
+        });
+        
+        syncFilesToDB(name, data);
+        importedCount++;
+        if (importedCount === validFiles.length) {
+          isRestoring = false;
+          saveFS(); 
+          alert("Successfully imported " + importedCount + " file(s)! Reloading page...");
+          location.reload();
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+    this.value = '';
+  });
+
+  // 4. Clear Data
+  document.getElementById('gd-btn-clear').addEventListener('click', () => {
+    popup.style.display = 'none';
+    if (!confirm("Are you sure you want to clear all your saved game data and local levels?")) return;
+    if (!confirm("Are you REALLY sure? This will permanently wipe your progress and cannot be undone!")) return;
+
+    isRestoring = true;
+    try {
+      if (Module && Module.FS) {
+        ['CCGameManager.dat', 'CCLocalLevels.dat'].forEach(file => {
+          ['/Resources/' + file, '/' + file, '/AppData/' + file].forEach(p => {
+            try { Module.FS.unlink(p); } catch(e) {}
+          });
+        });
+      }
+      const delReq = indexedDB.deleteDatabase('gdwasm_saves');
+      delReq.onsuccess = delReq.onerror = delReq.onblocked = function() {
+        alert("All save data has been cleared. The page will now reload.");
+        location.reload();
+      };
+    } catch (e) {
+      alert("All save data has been cleared. The page will now reload.");
+      location.reload();
+    }
+  });
+});
+
+function restoreSavesBeforeBoot(callback) {
   try {
     var req = indexedDB.open('gdwasm_saves', 1);
     req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
-    req.onerror = function() { clearTimeout(safetyTimer); finish(); };
+    req.onerror = function() { callback(); };
     req.onsuccess = function () {
       var db = req.result;
       try {
@@ -449,55 +580,32 @@ function restoreSaves(then) {
         var valsReq = store.getAll();
         
         tx.oncomplete = function() {
-          clearTimeout(safetyTimer);
           var keys = keysReq.result || [];
           var vals = valsReq.result || [];
           if (!keys.length) {
-            finish();
+            callback();
             return;
           }
           
-          let i = 0;
-          function processNextFile() {
-            if (i >= keys.length) {
-              finish();
-              return;
-            }
+          for (let i = 0; i < keys.length; i++) {
             try {
               var k = keys[i];
               var res = vals[i];
               if (res && res.byteLength) {
                 var s = String(k);
-                var base = s.indexOf('AppData/') === 0 ? '/' : (s.indexOf('songs/') === 0 ? '/' : '/Resources/');
-                var parts = s.split('/'), cur = base.replace(/\/$/, '');
-                for (var pi = 0; pi < parts.length - 1; ++pi) {
-                  cur += '/' + parts[pi];
-                  try { Module.FS.stat(cur); } catch (e2) { Module.FS.mkdir(cur); }
-                }
-                Module.FS.writeFile(base + s, new Uint8Array(res));
+                var filename = s.split('/').pop();
+                ['/Resources/' + filename, '/' + filename, '/AppData/' + filename].forEach(function(targetPath) {
+                  try { Module.FS.writeFile(targetPath, new Uint8Array(res)); } catch(e2) {}
+                });
               }
             } catch (e) {}
-            i++;
-            setTimeout(processNextFile, 4);
           }
-          processNextFile();
+          callback();
         };
-        tx.onerror = function() { clearTimeout(safetyTimer); finish(); };
-      } catch (e) { clearTimeout(safetyTimer); finish(); }
+        tx.onerror = function() { callback(); };
+      } catch (e) { callback(); }
     };
-  } catch (e) { clearTimeout(safetyTimer); finish(); }
-}
-
-function setAssetBar(kind, loaded, total) {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay && total) {
-    const pct = Math.min(100, Math.round((loaded / total) * 100));
-    if (kind === 'data') {
-      overlay.innerText = `Downloading (Data) Gzip files (${pct}%)`;
-    } else if (kind === 'wasm') {
-      overlay.innerText = `Downloading (Wasm) Gzip files (${pct}%)`;
-    }
-  }
+  } catch (e) { callback(); }
 }
 
 let preloadedDataBuffer = null;
@@ -535,66 +643,31 @@ var Module = {
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.style.display = 'none';
 
-    if (Module._gd_autosave_set) Module._gd_autosave_set(1);
-    
-    if (Module.FS && Module.FS.writeFile && !Module.FS.__hooked) {
-      var origWrite = Module.FS.writeFile;
-      Module.FS.writeFile = function (path, data, opts) {
-        var res = origWrite.apply(this, arguments);
-        if (!isRestoring && path) {
-          var cleanKey = path.replace(/^\/(Resources\/)?/, '');
-          if (cleanKey.indexOf('CCLocalLevels') >= 0 || cleanKey.indexOf('CCGameManager') >= 0 || cleanKey.indexOf('.dat') >= 0 || cleanKey.endsWith('.mp3') || cleanKey.endsWith('.ogg')) {
-            syncFilesToDB(cleanKey, data);
-            syncFilesToDB('songs/' + cleanKey.split('/').pop(), data);
-          }
-        }
-        return res;
-      };
-      Module.FS.__hooked = true;
-    }
-
-    if (Module.FS && Module.FS.unlink && !Module.FS.__unlinkHooked) {
-      var origUnlink = Module.FS.unlink;
-      Module.FS.unlink = function (path) {
-        var res;
-        try {
-          res = origUnlink.apply(this, arguments);
-        } catch (e) {}
-        try {
-          var fileName = path.split('/').pop();
-          var req = indexedDB.open('gdwasm_saves', 1);
-          req.onsuccess = function () {
-            var db = req.result;
-            var tx = db.transaction('files', 'readwrite');
-            var store = tx.objectStore('files');
-            
-            [
-              path,
-              path.replace(/^\//, ''),
-              'songs/' + fileName,
-              'Resources/songs/' + fileName,
-              '/songs/' + fileName,
-              '/Resources/songs/' + fileName,
-              fileName
-            ].forEach(key => {
-              try { store.delete(key); } catch(e) {}
-            });
-          };
-        } catch (e) {}
-        return res;
-      };
-      Module.FS.__unlinkHooked = true;
-    }
-
     try { Module.FS.chdir('/Resources'); } catch (e) {}
-    setTimeout(function () {
-      restoreSaves(function () {
-        try {
-          const r = Module._gd_boot();
-          if (r && typeof r.then === 'function') r.catch(function () {});
-        } catch (e) {}
-      });
-    }, 50);
+
+    // Synchronously restore saved files into MEMFS BEFORE engine boots
+    restoreSavesBeforeBoot(function () {
+      if (Module.FS && Module.FS.writeFile && !Module.FS.__hooked) {
+        var origWrite = Module.FS.writeFile;
+        Module.FS.writeFile = function (path, data, opts) {
+          var res = origWrite.apply(this, arguments);
+          if (!isRestoring && path) {
+            var cleanKey = path.replace(/^\/(Resources\/)?/, '');
+            if (cleanKey.indexOf('CCLocalLevels') >= 0 || cleanKey.indexOf('CCGameManager') >= 0 || cleanKey.indexOf('.dat') >= 0 || cleanKey.endsWith('.mp3') || cleanKey.endsWith('.ogg')) {
+              syncFilesToDB(cleanKey, data);
+              syncFilesToDB('songs/' + cleanKey.split('/').pop(), data);
+            }
+          }
+          return res;
+        };
+        Module.FS.__hooked = true;
+      }
+
+      try {
+        const r = Module._gd_boot();
+        if (r && typeof r.then === 'function') r.catch(function () {});
+      } catch (e) {}
+    });
   }
 };
 
@@ -608,7 +681,6 @@ function loadScriptAsync(src) {
   });
 }
 
-// Automatic Load Execution with payload/ Fallbacks
 async function gdStartAuto() {
   window.__gdLoadStarted = true;
   window.__gdInputReady = true;
@@ -634,7 +706,7 @@ async function gdStartAuto() {
         break;
       } catch(e) {}
     }
-    if (!scriptLoaded) throw new Error("Failed to load gd_assets.js (checked payload/ and root)");
+    if (!scriptLoaded) throw new Error("Failed to load gd_assets.js");
 
     if (!window.GDAssets || !window.GDAssets.loadScript) {
       throw new Error("GDAssets is missing!");
@@ -657,7 +729,7 @@ async function gdStartAuto() {
     }
 
     if (!manifest) {
-      throw new Error("Asset manifest HTTP 404 (gd_assets.json not found)");
+      throw new Error("Asset manifest HTTP 404");
     }
 
     if (overlay) overlay.innerText = 'Downloading (Data) Gzip files (0%)';
